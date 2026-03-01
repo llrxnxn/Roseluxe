@@ -25,6 +25,14 @@ import HeaderScreen from './HeaderScreen';
 const { width } = Dimensions.get('window');
 const PRODUCT_CARD_WIDTH = (width - 40) / 2;
 
+// ✅ HELPER FUNCTION - Extract category name safely
+const getCategoryName = (category) => {
+  if (typeof category === 'object' && category?.name) {
+    return category.name;
+  }
+  return typeof category === 'string' ? category : 'N/A';
+};
+
 const ProductScreen = ({ navigation }) => {
   const [products, setProducts] = useState([]);
   const [filteredProducts, setFilteredProducts] = useState([]);
@@ -53,7 +61,9 @@ const ProductScreen = ({ navigation }) => {
     if (searchQuery.trim()) {
       const filtered = products.filter((product) =>
         product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.category.toLowerCase().includes(searchQuery.toLowerCase())
+        getCategoryName(product.category)
+          .toLowerCase()
+          .includes(searchQuery.toLowerCase())
       );
       setFilteredProducts(filtered);
     } else {
@@ -211,7 +221,7 @@ const ProductScreen = ({ navigation }) => {
     handleAddToCart(product, productQuantity);
     setShowProductModal(false);
     setProductQuantity(1);
-    
+
     // Navigate to Cart
     setTimeout(() => {
       navigation.navigate('Cart');
@@ -273,8 +283,9 @@ const ProductScreen = ({ navigation }) => {
             <Text style={styles.price}>₱{item.price?.toFixed(2) || '0.00'}</Text>
           </View>
 
+          {/* ✅ FIXED: Display category name safely */}
           <Text style={styles.category} numberOfLines={1}>
-            {item.category}
+            {getCategoryName(item.category)}
           </Text>
         </View>
 
@@ -351,8 +362,9 @@ const ProductScreen = ({ navigation }) => {
                   <Text style={styles.modalProductName}>
                     {selectedProduct.name}
                   </Text>
+                  {/* ✅ FIXED: Display category name safely */}
                   <Text style={styles.modalCategory}>
-                    {selectedProduct.category}
+                    {getCategoryName(selectedProduct.category)}
                   </Text>
                 </View>
 

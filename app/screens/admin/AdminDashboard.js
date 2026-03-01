@@ -61,13 +61,19 @@ export default function AdminDashboard({ navigation }) {
   };
 
   const navigateTo = (screenName) => {
-    if (screenName === 'logout') {
-      handleLogout();
-    } else {
-      setActiveTab(screenName);
-      navigation.navigate(screenName);
-    }
-  };
+  if (screenName === 'logout') {
+    handleLogout();
+    return;
+  }
+
+  if (screenName === 'overview') {
+    setActiveTab('overview');
+    return;
+  }
+
+  setActiveTab(screenName);
+  navigation.navigate(screenName);
+};
 
   // Menu items configuration
   const menuItems = [
