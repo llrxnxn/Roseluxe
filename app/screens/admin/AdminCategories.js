@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -15,6 +15,7 @@ import {
 import { Text } from 'react-native-paper';
 import * as ImagePicker from 'expo-image-picker';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import AdminHeader from './AdminHeader';
 import { API_ENDPOINTS } from '../../config/api';
 
@@ -27,9 +28,7 @@ export default function AdminCategories({ navigation }) {
   const [modalVisible, setModalVisible] = useState(false);
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState(null);
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const [imagePreviewVisible, setImagePreviewVisible] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -39,6 +38,64 @@ export default function AdminCategories({ navigation }) {
   });
   const [errors, setErrors] = useState({});
   const [isEditing, setIsEditing] = useState(false);
+
+  // Menu items configuration
+  const menuItems = [
+    {
+      label: 'Overview',
+      icon: 'view-dashboard',
+      onPress: () => navigation.navigate('AdminDashboard'),
+    },
+    {
+      label: 'Users',
+      icon: 'account-multiple',
+      onPress: () => navigation.navigate('AdminUsers'),
+    },
+    {
+      label: 'Products',
+      icon: 'flower',
+      onPress: () => navigation.navigate('AdminProducts'),
+    },
+    {
+      label: 'Categories',
+      icon: 'tag-multiple',
+      onPress: () => navigation.navigate('AdminCategories'),
+    },
+    {
+      label: 'Orders',
+      icon: 'clipboard-list',
+      onPress: () => navigation.navigate('AdminOrders'),
+    },
+    {
+      label: 'Reviews',
+      icon: 'star',
+      onPress: () => navigation.navigate('AdminReviews'),
+    },
+    {
+      label: 'Logout',
+      icon: 'logout',
+      onPress: async () => {
+        Alert.alert('Logout', 'Are you sure you want to logout?', [
+          { text: 'Cancel' },
+          {
+            text: 'Logout',
+            onPress: async () => {
+              try {
+                await AsyncStorage.removeItem('authToken');
+                await AsyncStorage.removeItem('user');
+                navigation.reset({
+                  index: 0,
+                  routes: [{ name: 'Home' }],
+                });
+              } catch (error) {
+                console.log('Logout error:', error);
+              }
+            },
+          },
+        ]);
+      },
+    },
+  ];
 
   useEffect(() => {
     fetchCategories();
@@ -151,80 +208,114 @@ export default function AdminCategories({ navigation }) {
 
   /* ================= OPEN EDIT MODAL ================= */
   const openEditModal = (category) => {
-  setIsEditing(true);
-  setSelectedCategory(category); // ✅ ADD THIS - CRITICAL FIX!
-  setFormData({
-    name: category.name,
-    description: category.description,
-    image: category.image ? { uri: category.image, isNew: false } : null,
-  });
-  setErrors({});
-  setAddModalVisible(true);
-};
+    setIsEditing(true);
+    setSelectedCategory(category);
+    setFormData({
+      name: category.name,
+      description: category.description,
+      image: category.image ? { uri: category.image, isNew: false } : null,
+    });
+    setErrors({});
+    setAddModalVisible(true);
+  };
+
+  /* ================= DELETE CATEGORY ================= */
+  const handleDeleteCategory = (categoryId) => {
+    Alert.alert('Delete Category', 'Are you sure you want to delete this category?', [
+      { text: 'Cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            setLoading(true);
+            const response = await fetch(`${API_ENDPOINTS.CATEGORIES}/${categoryId}`, {
+              method: 'DELETE',
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+              throw new Error(data.message);
+            }
+
+            if (data.success) {
+              setModalVisible(false);
+              Alert.alert('Success', 'Category deleted successfully');
+              fetchCategories();
+            }
+          } catch (error) {
+            Alert.alert('Error', 'Failed to delete category');
+          } finally {
+            setLoading(false);
+          }
+        },
+      },
+    ]);
+  };
 
   /* ================= SUBMIT FORM ================= */
   const handleSubmit = async () => {
-  if (!validateForm()) {
-    Alert.alert('Validation Error', 'Please fill all required fields');
-    return;
-  }
+    if (!validateForm()) {
+      Alert.alert('Validation Error', 'Please fill all required fields');
+      return;
+    }
 
-  try {
-    setLoading(true);
-    const formDataObj = new FormData();
+    try {
+      setLoading(true);
+      const formDataObj = new FormData();
 
-    formDataObj.append('name', formData.name.trim());
-    formDataObj.append('description', formData.description.trim());
+      formDataObj.append('name', formData.name.trim());
+      formDataObj.append('description', formData.description.trim());
 
-    // Add image if new
-    if (formData.image?.isNew) {
-      formDataObj.append('image', {
-        uri: formData.image.uri,
-        type: 'image/jpeg',
-        name: `category-${Date.now()}.jpg`,
+      // Add image if new
+      if (formData.image?.isNew) {
+        formDataObj.append('image', {
+          uri: formData.image.uri,
+          type: 'image/jpeg',
+          name: `category-${Date.now()}.jpg`,
+        });
+      }
+
+      const method = isEditing ? 'PUT' : 'POST';
+
+      const endpoint = isEditing
+        ? `${API_ENDPOINTS.CATEGORIES}/${selectedCategory._id}`
+        : API_ENDPOINTS.CATEGORIES;
+
+      const response = await fetch(endpoint, {
+        method,
+        body: formDataObj,
       });
-    }
 
-    const method = isEditing ? 'PUT' : 'POST';
-    
-    // ✅ FIXED: Now selectedCategory will always have value when editing
-    const endpoint = isEditing
-      ? `${API_ENDPOINTS.CATEGORIES}/${selectedCategory._id}`
-      : API_ENDPOINTS.CATEGORIES;
+      const data = await response.json();
 
-    const response = await fetch(endpoint, {
-      method,
-      body: formDataObj,
-    });
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to save category');
+      }
 
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.message || 'Failed to save category');
-    }
-
-    if (data.success) {
-      Alert.alert(
-        'Success',
-        isEditing ? 'Category updated successfully' : 'Category created successfully',
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              setAddModalVisible(false);
-              fetchCategories();
+      if (data.success) {
+        Alert.alert(
+          'Success',
+          isEditing ? 'Category updated successfully' : 'Category created successfully',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                setAddModalVisible(false);
+                fetchCategories();
+              },
             },
-          },
-        ]
-      );
+          ]
+        );
+      }
+    } catch (error) {
+      console.log('Submit error:', error);
+      Alert.alert('Error', error.message || 'Failed to save category');
+    } finally {
+      setLoading(false);
     }
-  } catch (error) {
-    console.log('Submit error:', error);
-    Alert.alert('Error', error.message || 'Failed to save category');
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   /* ================= INPUT HANDLER ================= */
   const handleInputChange = (field, value) => {
@@ -264,7 +355,10 @@ export default function AdminCategories({ navigation }) {
   if (loading && categories.length === 0) {
     return (
       <SafeAreaView style={styles.container}>
-        <AdminHeader onMenuPress={setSidebarOpen} />
+        <AdminHeader
+          menuItems={menuItems}
+          onMenuPress={(isOpen) => setIsMenuOpen(isOpen)}
+        />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#B76E79" />
         </View>
@@ -274,7 +368,10 @@ export default function AdminCategories({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <AdminHeader onMenuPress={setSidebarOpen} />
+      <AdminHeader
+        menuItems={menuItems}
+        onMenuPress={(isOpen) => setIsMenuOpen(isOpen)}
+      />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.headerRow}>
@@ -313,7 +410,6 @@ export default function AdminCategories({ navigation }) {
                 style={styles.categoryCard}
                 onPress={() => {
                   setSelectedCategory(category);
-                  setCurrentImageIndex(0);
                   setModalVisible(true);
                 }}
               >

@@ -7,7 +7,6 @@ import {
   Alert,
   SafeAreaView,
   TextInput,
-  Animated,
   Modal,
   Image,
   ActivityIndicator,
@@ -24,7 +23,7 @@ export default function AdminProducts({ navigation }) {
   const [products, setProducts] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredProducts, setFilteredProducts] = useState([]);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -33,7 +32,63 @@ export default function AdminProducts({ navigation }) {
   const [selectionMode, setSelectionMode] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  const sidebarAnim = useRef(new Animated.Value(0)).current;
+  // Menu items configuration
+  const menuItems = [
+    {
+      label: 'Overview',
+      icon: 'view-dashboard',
+      onPress: () => navigation.navigate('AdminDashboard'),
+    },
+    {
+      label: 'Users',
+      icon: 'account-multiple',
+      onPress: () => navigation.navigate('AdminUsers'),
+    },
+    {
+      label: 'Products',
+      icon: 'flower',
+      onPress: () => navigation.navigate('AdminProducts'),
+    },
+    {
+      label: 'Categories',
+      icon: 'tag-multiple',
+      onPress: () => navigation.navigate('AdminCategories'),
+    },
+    {
+      label: 'Orders',
+      icon: 'clipboard-list',
+      onPress: () => navigation.navigate('AdminOrders'),
+    },
+    {
+      label: 'Reviews',
+      icon: 'star',
+      onPress: () => navigation.navigate('AdminReviews'),
+    },
+    {
+      label: 'Logout',
+      icon: 'logout',
+      onPress: async () => {
+        Alert.alert('Logout', 'Are you sure you want to logout?', [
+          { text: 'Cancel' },
+          {
+            text: 'Logout',
+            onPress: async () => {
+              try {
+                await AsyncStorage.removeItem('authToken');
+                await AsyncStorage.removeItem('user');
+                navigation.reset({
+                  index: 0,
+                  routes: [{ name: 'Home' }],
+                });
+              } catch (error) {
+                console.log('Logout error:', error);
+              }
+            },
+          },
+        ]);
+      },
+    },
+  ];
 
   useEffect(() => {
     fetchProducts();
@@ -42,14 +97,6 @@ export default function AdminProducts({ navigation }) {
   useEffect(() => {
     filterProducts();
   }, [searchQuery, products]);
-
-  useEffect(() => {
-    Animated.timing(sidebarAnim, {
-      toValue: sidebarOpen ? 1 : 0,
-      duration: 300,
-      useNativeDriver: false,
-    }).start();
-  }, [sidebarOpen]);
 
   /* ================= FETCH PRODUCTS ================= */
   const fetchProducts = async () => {
@@ -74,7 +121,7 @@ export default function AdminProducts({ navigation }) {
 
       if (data.success && data.products) {
         console.log('✅ PRODUCTS LOADED:', data.products.length, 'items');
-        
+
         setProducts(data.products);
       } else {
         console.warn('⚠️ UNEXPECTED RESPONSE FORMAT:', data);
@@ -246,7 +293,10 @@ export default function AdminProducts({ navigation }) {
   if (loading && !refreshing) {
     return (
       <SafeAreaView style={styles.container}>
-        <AdminHeader onMenuPress={setSidebarOpen} />
+        <AdminHeader
+          menuItems={menuItems}
+          onMenuPress={(isOpen) => setIsMenuOpen(isOpen)}
+        />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#B76E79" />
           <Text style={{ marginTop: 12, color: '#999' }}>Loading products...</Text>
@@ -257,19 +307,23 @@ export default function AdminProducts({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <AdminHeader onMenuPress={setSidebarOpen} />
+      <AdminHeader
+        menuItems={menuItems}
+        onMenuPress={(isOpen) => setIsMenuOpen(isOpen)}
+      />
 
-      <ScrollView 
-        style={styles.content} 
+      <ScrollView
+        style={styles.content}
         showsVerticalScrollIndicator={false}
+        scrollEnabled={!isMenuOpen}
         refreshControl={
-    <RefreshControl
-      refreshing={refreshing}
-      onRefresh={onRefresh}
-      colors={["#B76E79"]} // Android
-      tintColor="#B76E79"  // iOS
-    />
-  }
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#B76E79']}
+            tintColor="#B76E79"
+          />
+        }
       >
         <View style={styles.headerRow}>
           <View>
@@ -315,7 +369,11 @@ export default function AdminProducts({ navigation }) {
               onPress={toggleSelectAll}
             >
               <MaterialCommunityIcons
-                name={selectedItems.length === filteredProducts.length ? 'checkbox-marked' : 'checkbox-blank-outline'}
+                name={
+                  selectedItems.length === filteredProducts.length
+                    ? 'checkbox-marked'
+                    : 'checkbox-blank-outline'
+                }
                 size={20}
                 color="#B76E79"
               />
@@ -353,7 +411,9 @@ export default function AdminProducts({ navigation }) {
           <View style={styles.emptyState}>
             <MaterialCommunityIcons name="inbox" size={64} color="#ddd" />
             <Text style={styles.emptyText}>
-              {products.length === 0 ? 'No products in database' : 'No products match your search'}
+              {products.length === 0
+                ? 'No products in database'
+                : 'No products match your search'}
             </Text>
           </View>
         ) : (
@@ -376,9 +436,7 @@ export default function AdminProducts({ navigation }) {
                       : 'checkbox-blank-outline'
                   }
                   size={24}
-                  color={
-                    selectedItems.includes(product._id) ? '#B76E79' : '#ccc'
-                  }
+                  color={selectedItems.includes(product._id) ? '#B76E79' : '#ccc'}
                 />
               </TouchableOpacity>
 
@@ -405,9 +463,10 @@ export default function AdminProducts({ navigation }) {
               >
                 <Image
                   source={{
-                    uri: product.images && product.images.length > 0
-                      ? product.images[0]
-                      : 'https://via.placeholder.com/150',
+                    uri:
+                      product.images && product.images.length > 0
+                        ? product.images[0]
+                        : 'https://via.placeholder.com/150',
                   }}
                   style={styles.image}
                   onError={() => console.log('Image failed to load:', product._id)}
@@ -501,7 +560,12 @@ export default function AdminProducts({ navigation }) {
                     )}
                   </>
                 ) : (
-                  <View style={[styles.modalImage, { justifyContent: 'center', alignItems: 'center' }]}>
+                  <View
+                    style={[
+                      styles.modalImage,
+                      { justifyContent: 'center', alignItems: 'center' },
+                    ]}
+                  >
                     <MaterialCommunityIcons name="image-off" size={64} color="#ccc" />
                   </View>
                 )}
@@ -679,12 +743,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     fontSize: 14,
     backgroundColor: '#f9f9f9',
-  },
-
-  refreshContainer: {
-    paddingVertical: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
 
   // ========== SELECTION MODE ==========
@@ -972,4 +1030,3 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 });
-

@@ -5,10 +5,8 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
-  Dimensions,
   SafeAreaView,
   TextInput,
-  Animated,
   Modal,
   ActivityIndicator,
   Image,
@@ -18,8 +16,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import AdminHeader from './AdminHeader';
 import { API_ENDPOINTS } from '../../config/api';
-
-const { width } = Dimensions.get('window');
 
 // Helper function to generate initials
 const getInitials = (fullName) => {
@@ -43,13 +39,69 @@ export default function AdminUsers({ navigation }) {
   const [users, setUsers] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredUsers, setFilteredUsers] = useState([]);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalType, setModalType] = useState('role');
   const [loading, setLoading] = useState(true);
 
-  const sidebarAnim = React.useRef(new Animated.Value(0)).current;
+  // Menu items configuration
+  const menuItems = [
+    {
+      label: 'Overview',
+      icon: 'view-dashboard',
+      onPress: () => navigation.navigate('AdminDashboard'),
+    },
+    {
+      label: 'Users',
+      icon: 'account-multiple',
+      onPress: () => navigation.navigate('AdminUsers'),
+    },
+    {
+      label: 'Products',
+      icon: 'flower',
+      onPress: () => navigation.navigate('AdminProducts'),
+    },
+    {
+      label: 'Categories',
+      icon: 'tag-multiple',
+      onPress: () => navigation.navigate('AdminCategories'),
+    },
+    {
+      label: 'Orders',
+      icon: 'clipboard-list',
+      onPress: () => navigation.navigate('AdminOrders'),
+    },
+    {
+      label: 'Reviews',
+      icon: 'star',
+      onPress: () => navigation.navigate('AdminReviews'),
+    },
+    {
+      label: 'Logout',
+      icon: 'logout',
+      onPress: async () => {
+        Alert.alert('Logout', 'Are you sure you want to logout?', [
+          { text: 'Cancel' },
+          {
+            text: 'Logout',
+            onPress: async () => {
+              try {
+                await AsyncStorage.removeItem('authToken');
+                await AsyncStorage.removeItem('user');
+                navigation.reset({
+                  index: 0,
+                  routes: [{ name: 'Home' }],
+                });
+              } catch (error) {
+                console.log('Logout error:', error);
+              }
+            },
+          },
+        ]);
+      },
+    },
+  ];
 
   /* ================= LOAD USERS ================= */
 
@@ -148,8 +200,8 @@ export default function AdminUsers({ navigation }) {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ 
-            isActive: newStatus === 'Active' ? true : false 
+          body: JSON.stringify({
+            isActive: newStatus === 'Active' ? true : false,
           }),
         }
       );
@@ -173,16 +225,25 @@ export default function AdminUsers({ navigation }) {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <ActivityIndicator size="large" color="#B76E79" />
+        <AdminHeader
+          menuItems={menuItems}
+          onMenuPress={(isOpen) => setIsMenuOpen(isOpen)}
+        />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#B76E79" />
+        </View>
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      <AdminHeader onMenuPress={setSidebarOpen} />
+      <AdminHeader
+        menuItems={menuItems}
+        onMenuPress={(isOpen) => setIsMenuOpen(isOpen)}
+      />
 
-      <ScrollView contentContainerStyle={styles.contentContainer}>
+      <ScrollView contentContainerStyle={styles.contentContainer} scrollEnabled={!isMenuOpen}>
         {/* Header Section */}
         <Text style={styles.pageTitle}>Users Management</Text>
         <Text style={styles.pageSubtitle}>
@@ -539,5 +600,12 @@ const styles = StyleSheet.create({
     color: '#B76E79',
     fontWeight: '600',
     textAlign: 'center',
+  },
+
+  // ========== LOADING ==========
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

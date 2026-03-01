@@ -7,7 +7,6 @@ import {
   Alert,
   Dimensions,
   SafeAreaView,
-  Animated,
 } from 'react-native';
 import { Text, Card } from 'react-native-paper';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -19,21 +18,12 @@ const { width } = Dimensions.get('window');
 
 export default function AdminDashboard({ navigation }) {
   const [user, setUser] = useState(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
-  const sidebarAnim = React.useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     loadUserData();
   }, []);
-
-  useEffect(() => {
-    Animated.timing(sidebarAnim, {
-      toValue: sidebarOpen ? 1 : 0,
-      duration: 300,
-      useNativeDriver: false,
-    }).start();
-  }, [sidebarOpen]);
 
   const loadUserData = async () => {
     try {
@@ -70,13 +60,53 @@ export default function AdminDashboard({ navigation }) {
     ]);
   };
 
-  const navigateTo = (tab, screenName) => {
-    setActiveTab(tab);
-    setSidebarOpen(false);
-    if (screenName) {
+  const navigateTo = (screenName) => {
+    if (screenName === 'logout') {
+      handleLogout();
+    } else {
+      setActiveTab(screenName);
       navigation.navigate(screenName);
     }
   };
+
+  // Menu items configuration
+  const menuItems = [
+    {
+      label: 'Overview',
+      icon: 'view-dashboard',
+      onPress: () => navigateTo('overview'),
+    },
+    {
+      label: 'Users',
+      icon: 'account-multiple',
+      onPress: () => navigateTo('AdminUsers'),
+    },
+    {
+      label: 'Products',
+      icon: 'flower',
+      onPress: () => navigateTo('AdminProducts'),
+    },
+    {
+      label: 'Categories',
+      icon: 'tag-multiple',
+      onPress: () => navigateTo('AdminCategories'),
+    },
+    {
+      label: 'Orders',
+      icon: 'clipboard-list',
+      onPress: () => navigateTo('AdminOrders'),
+    },
+    {
+      label: 'Reviews',
+      icon: 'star',
+      onPress: () => navigateTo('AdminReviews'),
+    },
+    {
+      label: 'Logout',
+      icon: 'logout',
+      onPress: () => navigateTo('logout'),
+    },
+  ];
 
   const stats = [
     {
@@ -151,31 +181,6 @@ export default function AdminDashboard({ navigation }) {
     },
   ];
 
-  const SidebarItem = ({ icon, label, isActive, onPress }) => (
-    <TouchableOpacity
-      style={[styles.sidebarItem, isActive && styles.sidebarItemActive]}
-      onPress={onPress}
-      activeOpacity={0.7}
-    >
-      <View style={styles.sidebarItemContent}>
-        <MaterialCommunityIcons
-          name={icon}
-          size={22}
-          color={isActive ? '#B76E79' : '#999'}
-        />
-        <Text
-          style={[
-            styles.sidebarItemText,
-            isActive && styles.sidebarItemTextActive,
-          ]}
-        >
-          {label}
-        </Text>
-      </View>
-      {isActive && <View style={styles.sidebarIndicator} />}
-    </TouchableOpacity>
-  );
-
   const StatCard = ({ icon, label, value, color, bgColor }) => (
     <View style={[styles.statCard, { backgroundColor: bgColor }]}>
       <View style={[styles.statIconContainer, { backgroundColor: color }]}>
@@ -188,27 +193,20 @@ export default function AdminDashboard({ navigation }) {
     </View>
   );
 
-  const sidebarTranslate = sidebarAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [-280, 0],
-  });
-
-  const overlayOpacity = sidebarAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 0.5],
-  });
-
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <AdminHeader onMenuPress={setSidebarOpen} />
+      {/* Header with new modal menu */}
+      <AdminHeader
+        menuItems={menuItems}
+        onMenuPress={(isOpen) => setIsMenuOpen(isOpen)}
+      />
 
       {/* Main Content Area */}
       <View style={styles.mainContent}>
         <ScrollView
           style={styles.contentArea}
           contentContainerStyle={styles.contentContainer}
-          scrollEnabled={!sidebarOpen}
+          scrollEnabled={!isMenuOpen}
         >
           {activeTab === 'overview' && (
             <>
@@ -333,88 +331,6 @@ export default function AdminDashboard({ navigation }) {
             </>
           )}
         </ScrollView>
-
-        {/* Overlay */}
-        {sidebarOpen && (
-          <TouchableOpacity
-            style={[styles.overlay, { opacity: overlayOpacity }]}
-            activeOpacity={1}
-            onPress={() => setSidebarOpen(false)}
-          />
-        )}
-
-        {/* Sidebar */}
-        <Animated.View
-          style={[
-            styles.sidebar,
-            { transform: [{ translateX: sidebarTranslate }] },
-          ]}
-        >
-          <View style={styles.userCard}>
-            <View style={styles.userAvatarContainer}>
-              <Text style={styles.userAvatar}>👨‍💼</Text>
-            </View>
-            <View style={styles.userCardContent}>
-              <Text style={styles.userCardName}>WELCOME BACK!</Text>
-              <Text style={styles.userCardNameValue}>
-                {user?.fullName || 'Admin'}
-              </Text>
-              <Text style={styles.userCardEmail}>
-                {user?.email || 'admin@roseluxe.com'}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.sidebarDivider} />
-
-          <SidebarItem
-            icon="view-dashboard"
-            label="Overview"
-            isActive={activeTab === 'overview'}
-            onPress={() => navigateTo('overview')}
-          />
-          <SidebarItem
-            icon="account-multiple"
-            label="Users"
-            isActive={activeTab === 'users'}
-            onPress={() => navigateTo('users', 'AdminUsers')}
-          />
-          <SidebarItem
-            icon="flower"
-            label="Products"
-            isActive={activeTab === 'products'}
-            onPress={() => navigateTo('products', 'AdminProducts')}
-          />
-          <SidebarItem
-            icon="tag-multiple"
-            label="Categories"
-            isActive={activeTab === 'categories'}
-            onPress={() => navigateTo('categories', 'AdminCategories')}
-          />
-          <SidebarItem
-            icon="clipboard-list"
-            label="Orders"
-            isActive={activeTab === 'orders'}
-            onPress={() => navigateTo('orders', 'AdminOrders')}
-          />
-          <SidebarItem
-            icon="star"
-            label="Reviews"
-            isActive={activeTab === 'reviews'}
-            onPress={() => navigateTo('reviews', 'AdminReviews')}
-          />
-
-          <View style={styles.sidebarDivider} />
-
-          <TouchableOpacity
-            style={styles.logoutBtn}
-            onPress={handleLogout}
-            activeOpacity={0.7}
-          >
-            <MaterialCommunityIcons name="logout" size={20} color="white" />
-            <Text style={styles.logoutBtnText}>Logout</Text>
-          </TouchableOpacity>
-        </Animated.View>
       </View>
     </SafeAreaView>
   );
@@ -429,140 +345,6 @@ const styles = StyleSheet.create({
   mainContent: {
     flex: 1,
     width: '100%',
-  },
-
-  overlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: '#000',
-    zIndex: 10,
-  },
-
-  sidebar: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 280,
-    backgroundColor: 'white',
-    paddingVertical: 16,
-    zIndex: 20,
-    elevation: 15,
-    shadowColor: '#000',
-    shadowOffset: { width: 2, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 15,
-  },
-
-  userCard: {
-    marginHorizontal: 12,
-    marginBottom: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 14,
-    backgroundColor: '#FFF5F7',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#FFE8ED',
-  },
-
-  userAvatarContainer: {
-    marginBottom: 10,
-  },
-
-  userAvatar: {
-    fontSize: 36,
-  },
-
-  userCardContent: {
-    gap: 3,
-  },
-
-  userCardName: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#999',
-    letterSpacing: 0.5,
-  },
-
-  userCardNameValue: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#333',
-  },
-
-  userCardEmail: {
-    fontSize: 12,
-    color: '#B76E79',
-    fontWeight: '500',
-  },
-
-  sidebarDivider: {
-    height: 1,
-    backgroundColor: '#F0E6EB',
-    marginVertical: 12,
-  },
-
-  sidebarItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    marginHorizontal: 8,
-    marginVertical: 3,
-    borderRadius: 8,
-  },
-
-  sidebarItemActive: {
-    backgroundColor: '#FFF5F7',
-  },
-
-  sidebarItemContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flex: 1,
-  },
-
-  sidebarItemText: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#666',
-  },
-
-  sidebarItemTextActive: {
-    color: '#B76E79',
-    fontWeight: '700',
-  },
-
-  sidebarIndicator: {
-    width: 3,
-    height: 22,
-    backgroundColor: '#B76E79',
-    borderTopLeftRadius: 2,
-    borderBottomLeftRadius: 2,
-  },
-
-  logoutBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    marginHorizontal: 8,
-    marginTop: 8,
-    backgroundColor: '#D8A0AC',
-    borderRadius: 8,
-    justifyContent: 'center',
-  },
-
-  logoutBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: 'white',
   },
 
   contentArea: {
