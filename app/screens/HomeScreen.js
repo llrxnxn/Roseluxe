@@ -36,7 +36,7 @@ const HomeScreen = ({ navigation }) => {
     checkLoginStatus();
   }, []);
 
-  // ✅ FIXED: Proper auto-scroll with interval management
+  // FIXED: Proper auto-scroll with interval management
   useEffect(() => {
     if (categories.length > 0) {
       startAutoScroll();
@@ -72,32 +72,32 @@ const HomeScreen = ({ navigation }) => {
     }, 4000); // Increased to 4 seconds for better animation
   };
 
-  // ✅ CRITICAL FIX: Backend returns { categories: [...], count, success }
+  // CRITICAL FIX: Backend returns { categories: [...], count, success }
   // NOT just an array!
   const fetchCategories = async () => {
     try {
       setLoadingCategories(true);
-      console.log('🔄 Fetching categories from:', API_ENDPOINTS.CATEGORIES);
+      console.log('Fetching categories from:', API_ENDPOINTS.CATEGORIES);
       
       const response = await axios.get(`${API_ENDPOINTS.CATEGORIES}`);
       
-      console.log('📦 API Response:', response.data);
+      console.log('API Response:', response.data);
 
-      // ✅ FIX: Access response.data.categories (the actual array)
+      // FIX: Access response.data.categories (the actual array)
       if (response.data?.categories && Array.isArray(response.data.categories)) {
-        console.log(`✅ Successfully loaded ${response.data.categories.length} categories`);
+        console.log(`Successfully loaded ${response.data.categories.length} categories`);
         setCategories(response.data.categories);
       } else if (response.data && Array.isArray(response.data)) {
         // Fallback: in case API returns array directly
-        console.log(`✅ Successfully loaded ${response.data.length} categories`);
+        console.log(`Successfully loaded ${response.data.length} categories`);
         setCategories(response.data);
       } else {
-        console.warn('⚠️ Invalid categories response format:', response.data);
+        console.warn('Invalid categories response format:', response.data);
         console.warn('Expected: { categories: [...], count, success } or [...]');
         setCategories([]);
       }
     } catch (error) {
-      console.error('❌ Error fetching categories:', error);
+      console.error('Error fetching categories:', error);
       console.error('Error message:', error.message);
       console.error('Error URL:', error.config?.url);
       console.error('Response status:', error.response?.status);
@@ -168,7 +168,7 @@ const HomeScreen = ({ navigation }) => {
     }
   };
 
-  // ✅ IMPROVED: Better category card rendering
+  // IMPROVED: Better category card rendering
   const renderCategory = ({ item, index }) => (
     <View
       style={{
@@ -501,7 +501,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 
-  // ✅ NEW: Dots indicator for carousel
+  // NEW: Dots indicator for carousel
   dotsContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -524,7 +524,7 @@ const styles = StyleSheet.create({
     borderRadius: 5,
   },
 
-  // 📱 BOTTOM NAVIGATION STYLES
+  // BOTTOM NAVIGATION STYLES
   bottomNav: {
     position: 'absolute',
     bottom: 0,

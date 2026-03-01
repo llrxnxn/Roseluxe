@@ -32,7 +32,7 @@ const CartScreen = ({ navigation }) => {
     return unsubscribe;
   }, [navigation]);
 
-  // ✅ Load cart from AsyncStorage
+  // Load cart from AsyncStorage
   const loadCart = async () => {
     try {
       const savedCart = await AsyncStorage.getItem('cart');
@@ -44,7 +44,7 @@ const CartScreen = ({ navigation }) => {
     }
   };
 
-  // ✅ Check login status
+  //Check login status
   const checkLoginStatus = async () => {
     try {
       const user = await AsyncStorage.getItem('user');
@@ -62,7 +62,7 @@ const CartScreen = ({ navigation }) => {
     }
   };
 
-  // ✅ Update item quantity
+  // Update item quantity
   const updateQuantity = async (productId, newQuantity) => {
     if (newQuantity < 1) return;
 
@@ -74,7 +74,7 @@ const CartScreen = ({ navigation }) => {
     await AsyncStorage.setItem('cart', JSON.stringify(updatedCart));
   };
 
-  // ✅ Remove item from cart
+  // Remove item from cart
   const removeFromCart = async (productId) => {
     const updatedCart = cart.filter((item) => item._id !== productId);
     setCart(updatedCart);
@@ -82,7 +82,7 @@ const CartScreen = ({ navigation }) => {
     Alert.alert('Removed', 'Item removed from cart');
   };
 
-  // ✅ Calculate totals
+  // Calculate totals
   const calculateTotals = () => {
     const subtotal = cart.reduce(
       (sum, item) => sum + item.price * item.quantity,
@@ -94,7 +94,7 @@ const CartScreen = ({ navigation }) => {
     return { subtotal, shipping, total };
   };
 
-  // ✅ Handle checkout
+  // Handle checkout
   const handleCheckout = () => {
     if (!isLoggedIn) {
       Alert.alert(
@@ -120,7 +120,7 @@ const CartScreen = ({ navigation }) => {
     Alert.alert('Coming Soon', 'Checkout functionality coming soon!');
   };
 
-  // ✅ Render cart item
+  // Render cart item
   const renderCartItem = ({ item }) => {
     const itemTotal = item.price * item.quantity;
 
