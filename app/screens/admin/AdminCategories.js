@@ -27,8 +27,11 @@ export default function AdminCategories({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [addModalVisible, setAddModalVisible] = useState(false);
+  const [productsModalVisible, setProductsModalVisible] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState(null);
+  const [categoryProducts, setCategoryProducts] = useState([]);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [loadingProducts, setLoadingProducts] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -127,6 +130,30 @@ export default function AdminCategories({ navigation }) {
     }
   };
 
+  /* ================= FETCH PRODUCTS BY CATEGORY ================= */
+  const fetchProductsByCategory = async (categoryId) => {
+    try {
+      setLoadingProducts(true);
+      const response = await fetch(
+        `${API_ENDPOINTS.CATEGORIES}/${categoryId}/products`
+      );
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to fetch products');
+      }
+
+      if (data.success) {
+        setCategoryProducts(data.products || []);
+      }
+    } catch (error) {
+      console.log('Fetch products error:', error);
+      Alert.alert('Error', 'Unable to load products for this category');
+    } finally {
+      setLoadingProducts(false);
+    }
+  };
+
   /* ================= FILTER CATEGORIES ================= */
   const filterCategories = () => {
     if (!searchQuery.trim()) {
@@ -217,6 +244,13 @@ export default function AdminCategories({ navigation }) {
     });
     setErrors({});
     setAddModalVisible(true);
+  };
+
+  /* ================= OPEN PRODUCTS MODAL ================= */
+  const openProductsModal = (category) => {
+    setSelectedCategory(category);
+    setProductsModalVisible(true);
+    fetchProductsByCategory(category._id);
   };
 
   /* ================= DELETE CATEGORY ================= */
@@ -348,6 +382,34 @@ export default function AdminCategories({ navigation }) {
         multiline={multiline}
       />
       {errors[field] && <Text style={styles.errorText}>{errors[field]}</Text>}
+    </View>
+  );
+
+  /* ================= PRODUCT CARD COMPONENT ================= */
+  const ProductCard = ({ product }) => (
+    <View style={styles.productCard}>
+      <Image
+        source={{
+          uri: product.images?.[0] || 'https://via.placeholder.com/100',
+        }}
+        style={styles.productImage}
+      />
+      <View style={styles.productInfo}>
+        <Text style={styles.productName} numberOfLines={1}>
+          {product.name}
+        </Text>
+        <Text style={styles.productPrice}>₱{product.price}</Text>
+        <View style={styles.productMeta}>
+          <Text style={styles.productMetaText}>
+            Stock: {product.stock}
+          </Text>
+          {product.rating && (
+            <Text style={styles.productMetaText}>
+              ⭐ {product.rating}
+            </Text>
+          )}
+        </View>
+      </View>
     </View>
   );
 
@@ -572,6 +634,22 @@ export default function AdminCategories({ navigation }) {
                   </View>
                 )}
 
+                {/* Products Section */}
+                <View style={styles.detailSection}>
+                  <View style={styles.productsHeader}>
+                    <Text style={styles.detailLabel}>Products in this Category</Text>
+                    <TouchableOpacity
+                      style={styles.viewAllButton}
+                      onPress={() => {
+                        setModalVisible(false);
+                        openProductsModal(selectedCategory);
+                      }}
+                    >
+                      <Text style={styles.viewAllButtonText}>View All</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
                 {/* Action Buttons */}
                 <View style={styles.actionButtons}>
                   <TouchableOpacity
@@ -604,6 +682,54 @@ export default function AdminCategories({ navigation }) {
                   <Text style={styles.closeBtnText}>Close</Text>
                 </TouchableOpacity>
               </ScrollView>
+            </>
+          )}
+        </SafeAreaView>
+      </Modal>
+
+      {/* ================= PRODUCTS MODAL ================= */}
+      <Modal
+        visible={productsModalVisible}
+        animationType="slide"
+        onRequestClose={() => setProductsModalVisible(false)}
+      >
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
+          {selectedCategory && (
+            <>
+              {/* Header */}
+              <View style={styles.productsModalHeader}>
+                <TouchableOpacity onPress={() => setProductsModalVisible(false)}>
+                  <MaterialCommunityIcons name="arrow-left" size={28} color="#333" />
+                </TouchableOpacity>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={styles.productsModalTitle}>
+                    {selectedCategory.name}
+                  </Text>
+                  <Text style={styles.productsModalSubtitle}>
+                    {categoryProducts.length} products
+                  </Text>
+                </View>
+              </View>
+
+              {/* Products List */}
+              {loadingProducts ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color="#B76E79" />
+                </View>
+              ) : categoryProducts.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <MaterialCommunityIcons name="flower-outline" size={64} color="#ddd" />
+                  <Text style={styles.emptyText}>No products in this category</Text>
+                </View>
+              ) : (
+                <ScrollView style={styles.productsListContainer}>
+                  <View style={styles.productsList}>
+                    {categoryProducts.map((product) => (
+                      <ProductCard key={product._id} product={product} />
+                    ))}
+                  </View>
+                </ScrollView>
+              )}
             </>
           )}
         </SafeAreaView>
@@ -881,6 +1007,22 @@ const styles = StyleSheet.create({
     color: '#333',
     lineHeight: 20,
   },
+  productsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  viewAllButton: {
+    backgroundColor: '#B76E79',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+  },
+  viewAllButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
   actionButtons: {
     flexDirection: 'row',
     gap: 12,
@@ -926,6 +1068,71 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 14,
     fontWeight: '600',
+  },
+
+  // ========== PRODUCTS MODAL ==========
+  productsModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  productsModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#333',
+  },
+  productsModalSubtitle: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 2,
+  },
+  productsListContainer: {
+    flex: 1,
+  },
+  productsList: {
+    padding: 12,
+    gap: 12,
+  },
+  productCard: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    overflow: 'hidden',
+    elevation: 2,
+    marginBottom: 8,
+  },
+  productImage: {
+    width: 100,
+    height: 100,
+    backgroundColor: '#f0f0f0',
+  },
+  productInfo: {
+    flex: 1,
+    padding: 12,
+    justifyContent: 'space-between',
+  },
+  productName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#333',
+    marginBottom: 4,
+  },
+  productPrice: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#B76E79',
+    marginBottom: 6,
+  },
+  productMeta: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  productMetaText: {
+    fontSize: 12,
+    color: '#666',
   },
 
   // ========== LOADING ==========

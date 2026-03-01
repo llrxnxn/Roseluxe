@@ -7,6 +7,7 @@ const cloudinary = require('cloudinary').v2;
 exports.getAllProducts = async (req, res) => {
   try {
     const products = await Product.find({ isActive: true })
+      .populate('category', 'name description image') // ✅ POPULATE CATEGORY
       .sort({ createdAt: -1 })
       .lean();
 
@@ -30,7 +31,9 @@ exports.getAllProducts = async (req, res) => {
 ========================================= */
 exports.getSingleProduct = async (req, res) => {
   try {
-    const product = await Product.findById(req.params.id).lean();
+    const product = await Product.findById(req.params.id)
+      .populate('category', 'name description image') // ✅ POPULATE CATEGORY
+      .lean();
 
     if (!product || !product.isActive) {
       return res.status(404).json({
@@ -115,18 +118,22 @@ exports.createProduct = async (req, res) => {
       description: description.trim(),
       price: parsedPrice,
       stock: productStock,
-      category: category.trim(),
+      category: category, // ✅ Now expects ObjectId
       images: imageUrls,
     });
 
     await newProduct.save();
+
+    // ✅ Populate category before response
+    const savedProduct = await Product.findById(newProduct._id)
+      .populate('category', 'name description image');
 
     console.log('✅ Product created successfully:', newProduct._id);
 
     res.status(201).json({
       success: true,
       message: 'Product created successfully',
-      product: newProduct,
+      product: savedProduct,
     });
   } catch (error) {
     console.error('❌ Error creating product:', error);
@@ -207,8 +214,9 @@ exports.updateProduct = async (req, res) => {
       console.log('Updated stock to:', product.stock);
     }
 
+    // ✅ Update category (now as ObjectId)
     if (category && category.trim()) {
-      product.category = category.trim();
+      product.category = category.trim(); // ✅ Expects ObjectId
       console.log('Updated category to:', product.category);
     }
 
@@ -240,8 +248,9 @@ exports.updateProduct = async (req, res) => {
     await product.save();
     console.log('✅ Product saved successfully!');
 
-    // ✅ Verify it was saved
-    const savedProduct = await Product.findById(productId);
+    // ✅ Verify it was saved and populate category
+    const savedProduct = await Product.findById(productId)
+      .populate('category', 'name description image');
     console.log('✅ Verified saved product:', savedProduct.name);
 
     res.json({
@@ -364,9 +373,9 @@ exports.searchProducts = async (req, res) => {
       $or: [
         { name: { $regex: query, $options: 'i' } },
         { description: { $regex: query, $options: 'i' } },
-        { category: { $regex: query, $options: 'i' } },
       ],
     })
+      .populate('category', 'name description image') // ✅ POPULATE CATEGORY
       .sort({ createdAt: -1 })
       .lean();
 
@@ -390,14 +399,20 @@ exports.searchProducts = async (req, res) => {
 ========================================= */
 exports.getProductsByCategory = async (req, res) => {
   try {
-    const { category } = req.params;
+    const { categoryId } = req.params;
 
+    console.log('🟦 Getting products for category:', categoryId);
+
+    // ✅ FIXED: Query by ObjectId reference
     const products = await Product.find({
       isActive: true,
-      category: { $regex: category, $options: 'i' },
+      category: categoryId, // ✅ Now compares ObjectId directly
     })
+      .populate('category', 'name description image') // ✅ POPULATE CATEGORY
       .sort({ createdAt: -1 })
       .lean();
+
+    console.log('✅ Found products:', products.length);
 
     res.json({
       success: true,

@@ -3,6 +3,7 @@
 // ============================================
 
 const Category = require('../models/Category');
+const Product = require('../models/Products');
 const cloudinary = require('cloudinary').v2;
 
 /* =========================================
@@ -51,6 +52,51 @@ exports.getSingleCategory = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error fetching category',
+    });
+  }
+};
+
+/* =========================================
+   GET PRODUCTS BY CATEGORY
+========================================= */
+exports.getProductsByCategory = async (req, res) => {
+  try {
+    const { categoryId } = req.params;
+
+    // Verify category exists
+    const category = await Category.findById(categoryId);
+
+    if (!category || !category.isActive) {
+      return res.status(404).json({
+        success: false,
+        message: 'Category not found',
+      });
+    }
+
+    // Fetch products for this category
+    const products = await Product.find({
+      category: categoryId,
+      isActive: true,
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.json({
+      success: true,
+      category: {
+        id: category._id,
+        name: category.name,
+        description: category.description,
+        image: category.image,
+      },
+      products,
+      count: products.length,
+    });
+  } catch (error) {
+    console.error('Error fetching products by category:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching products',
     });
   }
 };

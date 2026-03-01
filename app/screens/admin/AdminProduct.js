@@ -161,10 +161,17 @@ export default function AdminProducts({ navigation }) {
 
     const query = searchQuery.toLowerCase();
 
-    const filtered = products.filter((product) =>
-      product.name?.toLowerCase().includes(query) ||
-      product.category?.toLowerCase().includes(query)
-    );
+    const filtered = products.filter((product) => {
+      const categoryName =
+        typeof product.category === 'object'
+          ? product.category?.name
+          : product.category;
+
+      return (
+        product.name?.toLowerCase().includes(query) ||
+        categoryName?.toLowerCase().includes(query)
+      );
+    });
 
     console.log('🔍 FILTERED RESULTS:', filtered.length);
     setFilteredProducts(filtered);
@@ -287,6 +294,14 @@ export default function AdminProducts({ navigation }) {
   /* ================= SAFE FORMAT ================= */
   const formatPrice = (price) => {
     return Number(price || 0).toFixed(2);
+  };
+
+  /* ================= GET CATEGORY NAME ================= */
+  const getCategoryName = (category) => {
+    if (typeof category === 'object' && category?.name) {
+      return category.name;
+    }
+    return category || 'N/A';
   };
 
   /* ================= LOADING ================= */
@@ -476,7 +491,9 @@ export default function AdminProducts({ navigation }) {
                   <Text style={styles.name} numberOfLines={2}>
                     {product.name || 'No name'}
                   </Text>
-                  <Text style={styles.category}>{product.category || 'No category'}</Text>
+                  <Text style={styles.category}>
+                    {getCategoryName(product.category)}
+                  </Text>
                   <View style={styles.priceStockRow}>
                     <Text style={styles.price}>₱{formatPrice(product.price)}</Text>
                     <Text
@@ -591,7 +608,9 @@ export default function AdminProducts({ navigation }) {
 
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>Category</Text>
-                  <Text style={styles.detailValue}>{selectedProduct.category}</Text>
+                  <Text style={styles.detailValue}>
+                    {getCategoryName(selectedProduct.category)}
+                  </Text>
                 </View>
 
                 <View style={styles.detailRow}>
