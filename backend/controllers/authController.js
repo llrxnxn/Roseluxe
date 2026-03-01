@@ -150,15 +150,15 @@ exports.updateProfile = async (req, res) => {
       });
     }
 
-    if (phone.length < 7) {
+    if (phone.length < 7 || phone.length > 11) {
       return res.status(400).json({
-        message: 'Phone number must be at least 7 digits',
+        message: 'Phone number must be between 7 and 11 digits',
       });
     }
 
-    if (address.length < 10) {
+    if (address.length < 5) {
       return res.status(400).json({
-        message: 'Address must be at least 10 characters',
+        message: 'Address must be at least 5 characters',
       });
     }
 
@@ -220,5 +220,50 @@ exports.updateProfile = async (req, res) => {
   } catch (error) {
     console.log(error);
     res.status(500).json({ message: error.message });
+  }
+};
+
+// ================= DELETE ACCOUNT =================
+exports.deleteAccount = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    console.log(`🗑️ Attempting to delete account for user: ${userId}`);
+
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Delete profile picture from Cloudinary if exists
+    if (user.picture) {
+      try {
+        // Extract public_id from Cloudinary URL
+        const publicId = `roseluxe_profiles/user_${userId}`;
+        
+        console.log(`📸 Deleting image from Cloudinary: ${publicId}`);
+        await cloudinary.uploader.destroy(publicId);
+        console.log(`✅ Image deleted from Cloudinary`);
+      } catch (cloudinaryError) {
+        console.log(`⚠️ Warning: Could not delete image from Cloudinary:`, cloudinaryError);
+        // Don't fail the entire deletion if image deletion fails
+      }
+    }
+
+    // Delete user from database
+    await User.findByIdAndDelete(userId);
+    console.log(`✅ User account deleted: ${userId}`);
+
+    res.json({
+      message: 'Account deleted successfully',
+      data: {
+        deletedUserId: userId,
+        timestamp: new Date(),
+      },
+    });
+  } catch (error) {
+    console.log('❌ Delete account error:', error);
+    res.status(500).json({ message: 'Failed to delete account: ' + error.message });
   }
 };

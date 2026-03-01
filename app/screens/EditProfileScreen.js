@@ -77,6 +77,102 @@ const EditProfileScreen = ({ navigation }) => {
     }
   };
 
+  const handleDeleteAccount = async () => {
+    Alert.alert(
+      'Delete Account',
+      'Are you sure you want to delete your account? This action cannot be undone.',
+      [
+        {
+          text: 'Cancel',
+          onPress: () => console.log('Delete cancelled'),
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          onPress: async () => {
+            // Second confirmation
+            Alert.alert(
+              'Confirm Delete',
+              'All your data will be permanently removed. Continue?',
+              [
+                {
+                  text: 'Cancel',
+                  style: 'cancel',
+                },
+                {
+                  text: 'Delete',
+                  onPress: () => performDeleteAccount(),
+                  style: 'destructive',
+                },
+              ]
+            );
+          },
+          style: 'destructive',
+        },
+      ]
+    );
+  };
+
+  const performDeleteAccount = async () => {
+    setLoading(true);
+    try {
+      const token = await AsyncStorage.getItem('authToken');
+      
+      if (!token) {
+        Alert.alert('Error', 'Not authenticated. Please login again.');
+        navigation.navigate('Login');
+        setLoading(false);
+        return;
+      }
+
+      console.log('🗑️ Deleting account for user:', user.id);
+
+      // Call delete account API
+      const response = await axios.delete(
+        `${API_ENDPOINTS.AUTH}/delete-account`,
+        {
+          headers: {
+            'Authorization': token,
+          },
+          timeout: 30000,
+        }
+      );
+
+      console.log('✅ Account deleted successfully:', response.data);
+
+      // Clear all stored data
+      await AsyncStorage.multiRemove(['authToken', 'user', 'refreshToken']);
+      console.log('💾 All data cleared from AsyncStorage');
+
+      Alert.alert('Account Deleted', 'Your account has been permanently deleted.', [
+        {
+          text: 'OK',
+          onPress: () => navigation.navigate('Login'),
+        },
+      ]);
+    } catch (error) {
+      console.log('❌ Delete account error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data,
+      });
+
+      let errorMessage = 'Failed to delete account';
+
+      if (error.response) {
+        errorMessage = error.response.data?.message || 'Account deletion failed';
+      } else if (error.request) {
+        errorMessage = 'No response from server. Check your connection.';
+      } else if (error.message === 'Network Error') {
+        errorMessage = 'Network error. Please check your internet connection.';
+      }
+
+      Alert.alert('Deletion Failed', errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleUpdateProfile = async () => {
     // Validation - All fields required for delivery
     if (!user.fullName || !user.email || !user.phone || !user.address) {
@@ -318,6 +414,18 @@ const EditProfileScreen = ({ navigation }) => {
           {loading ? 'Updating...' : 'Update Profile'}
         </Button>
 
+        {/* DELETE ACCOUNT BUTTON */}
+        <Button
+          mode="contained"
+          onPress={handleDeleteAccount}
+          loading={loading}
+          disabled={loading}
+          style={styles.deleteButton}
+          labelStyle={styles.deleteButtonLabel}
+        >
+          Delete Account
+        </Button>
+
         {/* CANCEL BUTTON */}
         <Button
           mode="outlined"
@@ -466,6 +574,17 @@ const styles = StyleSheet.create({
   },
 
   updateButtonLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+
+  deleteButton: {
+    backgroundColor: '#E53935',
+    marginBottom: 12,
+    paddingVertical: 8,
+  },
+
+  deleteButtonLabel: {
     fontSize: 16,
     fontWeight: 'bold',
   },

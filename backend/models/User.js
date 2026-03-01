@@ -48,6 +48,12 @@ const UserSchema = new mongoose.Schema({
     default: true,
   },
 
+  // Optional: For soft deletes if you want to keep user data
+  deletedAt: {
+    type: Date,
+    default: null,
+  },
+
 }, { timestamps: true });
 
 // Hash password bago i-save
@@ -57,7 +63,6 @@ UserSchema.pre('save', async function () {
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
 });
-
 
 // Method para i-compare password
 UserSchema.methods.comparePassword = async function (enteredPassword) {

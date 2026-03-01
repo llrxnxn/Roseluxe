@@ -11,5 +11,6 @@ router.post('/login', authController.login);
 // Protected routes
 router.get('/me', authenticateToken, authController.getCurrentUser);
 router.put('/update-profile', authenticateToken, upload.single('picture'), authController.updateProfile);  // ← ADD THIS
+router.delete('/delete-account', authenticateToken, authController.deleteAccount);
 
 module.exports = router;
