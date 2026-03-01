@@ -1,8 +1,7 @@
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
-const admin = require('firebase-admin');
-const cloudinary = require('cloudinary').v2;  // ← ADD THIS
-const streamifier = require('streamifier');     // ← ADD THIS
+const cloudinary = require('cloudinary').v2;
+const streamifier = require('streamifier');
 
 // Generate JWT Token
 const generateToken = (user) => {
@@ -21,23 +20,19 @@ const generateToken = (user) => {
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
-    console.log('Login attempt:', email);
 
-  
-    
     if (!email || !password) {
       return res.status(400).json({ message: 'Please provide email and password' });
     }
 
-    let user = await User.findOne({ email });
-    
+    const user = await User.findOne({ email });
+
     if (!user) {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
-    // Check password
     const isPasswordCorrect = await user.comparePassword(password);
-    
+
     if (!isPasswordCorrect) {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
@@ -47,7 +42,7 @@ exports.login = async (req, res) => {
     }
 
     const token = generateToken(user);
-    
+
     res.json({
       message: 'Login successful',
       token,
@@ -76,14 +71,14 @@ exports.register = async (req, res) => {
       return res.status(400).json({ message: 'Please fill all fields' });
     }
 
-    let existingUser = await User.findOne({ email });
+    const existingUser = await User.findOne({ email: email.toLowerCase() });
+
     if (existingUser) {
       return res.status(400).json({ message: 'User already exists' });
     }
 
     let imageUrl = null;
 
-    // 🔥 If user uploaded profile image
     if (req.file) {
       const uploadFromBuffer = () => {
         return new Promise((resolve, reject) => {
@@ -104,7 +99,7 @@ exports.register = async (req, res) => {
 
     const user = new User({
       fullName,
-      email,
+      email: email.toLowerCase(),
       password,
       phone,
       address,
@@ -127,63 +122,9 @@ exports.register = async (req, res) => {
         picture: user.picture,
       },
     });
-
   } catch (error) {
     console.log(error);
     res.status(500).json({ message: error.message });
-  }
-};
-
-// ================= GOOGLE LOGIN =================
-exports.googleLogin = async (req, res) => {
-  try {
-    const { idToken } = req.body;
-
-    const decodedToken = await admin.auth().verifyIdToken(idToken);
-    const { uid, email, name, picture } = decodedToken;
-
-    let user = await User.findOne({ email });
-
-    if (user && !user.isActive) {
-      return res.status(403).json({ message: 'Account is deactivated' });
-    }
-
-    if (!user) {
-      user = new User({
-        fullName: name,
-        email,
-        firebaseUID: uid,
-        picture: picture, // save Google profile picture
-        loginMethod: 'google',
-      });
-
-      await user.save();
-    } else {
-      if (!user.firebaseUID) {
-        user.firebaseUID = uid;
-        await user.save();
-      }
-    }
-
-    const token = generateToken(user);
-
-    res.json({
-      message: 'Google login successful',
-      token,
-      user: {
-        id: user._id,
-        fullName: user.fullName,
-        email: user.email,
-        role: user.role,
-        picture: user.picture,
-      },
-    });
-
-  } catch (error) {
-    res.status(500).json({
-      message: 'Google login failed',
-      error: error.message,
-    });
   }
 };
 
@@ -201,61 +142,53 @@ exports.getCurrentUser = async (req, res) => {
 exports.updateProfile = async (req, res) => {
   try {
     const { fullName, email, phone, address } = req.body;
-    const userId = req.user.id; // From auth middleware
+    const userId = req.user.id;
 
-    // Validate all required fields
     if (!fullName || !email || !phone || !address) {
-      return res.status(400).json({ 
-        message: 'All fields are required: fullName, email, phone, address' 
+      return res.status(400).json({
+        message: 'All fields are required: fullName, email, phone, address',
       });
     }
 
-    // Validate phone length
     if (phone.length < 7) {
-      return res.status(400).json({ 
-        message: 'Phone number must be at least 7 digits' 
+      return res.status(400).json({
+        message: 'Phone number must be at least 7 digits',
       });
     }
 
-    // Validate address length
     if (address.length < 10) {
-      return res.status(400).json({ 
-        message: 'Address must be at least 10 characters' 
+      return res.status(400).json({
+        message: 'Address must be at least 10 characters',
       });
     }
 
-    // Check if email is being changed and if it's already in use
-    if (email) {
-      const existingUser = await User.findOne({ 
-        email: email.toLowerCase(),
-        _id: { $ne: userId } // Exclude current user
-      });
-      
-      if (existingUser) {
-        return res.status(400).json({ message: 'Email is already in use' });
-      }
+    const existingUser = await User.findOne({
+      email: email.toLowerCase(),
+      _id: { $ne: userId },
+    });
+
+    if (existingUser) {
+      return res.status(400).json({ message: 'Email is already in use' });
     }
 
-    // Find user
-    let user = await User.findById(userId);
+    const user = await User.findById(userId);
+
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Update basic fields
-    if (fullName) user.fullName = fullName;
-    if (email) user.email = email.toLowerCase();
-    if (phone) user.phone = phone;
-    if (address) user.address = address;
+    user.fullName = fullName;
+    user.email = email.toLowerCase();
+    user.phone = phone;
+    user.address = address;
 
-    // 🔥 If user uploaded new profile image
     if (req.file) {
       const uploadFromBuffer = () => {
         return new Promise((resolve, reject) => {
           const uploadStream = cloudinary.uploader.upload_stream(
-            { 
+            {
               folder: 'roseluxe_profiles',
-              public_id: `user_${userId}`, // Save with consistent ID
+              public_id: `user_${userId}`,
             },
             (error, result) => {
               if (result) resolve(result);
@@ -265,13 +198,11 @@ exports.updateProfile = async (req, res) => {
           streamifier.createReadStream(req.file.buffer).pipe(uploadStream);
         });
       };
-      
+
       const result = await uploadFromBuffer();
       user.picture = result.secure_url;
-      console.log('Profile picture updated:', result.secure_url);
     }
 
-    // Save user
     await user.save();
 
     res.json({

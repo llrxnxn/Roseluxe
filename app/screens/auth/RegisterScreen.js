@@ -25,7 +25,6 @@ const RegisterScreen = ({ navigation }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // 📸 Pick Image
   const pickImage = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
@@ -45,7 +44,6 @@ const RegisterScreen = ({ navigation }) => {
   };
 
   const handleSignUp = async () => {
-    // Validation
     if (!fullName || !email || !password || !confirmPassword || !phone || !address) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
@@ -71,12 +69,11 @@ const RegisterScreen = ({ navigation }) => {
       formData.append('phone', phone);
       formData.append('address', address);
 
-      // Append profile image if selected
       if (profileImage) {
         formData.append('picture', {
           uri: profileImage.uri,
           type: 'image/jpeg',
-          name: profileImage.filename || 'profile.jpg',
+          name: profileImage.fileName || 'profile.jpg',
         });
       }
 
@@ -91,7 +88,10 @@ const RegisterScreen = ({ navigation }) => {
     } catch (error) {
       console.log('Registration error:', error);
       if (error.response) {
-        Alert.alert('Registration Failed', error.response.data.message || 'Registration failed');
+        Alert.alert(
+          'Registration Failed',
+          error.response.data.message || 'Registration failed'
+        );
       } else {
         Alert.alert('Network Error', 'Please check your connection');
       }
@@ -117,20 +117,7 @@ const RegisterScreen = ({ navigation }) => {
             Create Account
           </Text>
 
-          {/* Google Button */}
-          <TouchableOpacity style={styles.googleButton}>
-            <Image
-              source={{
-                uri: 'https://i.pinimg.com/1200x/59/7f/11/597f11b631d7d94492f1adb95110cc44.jpg',
-              }}
-              style={styles.googleIcon}
-            />
-            <Text style={styles.googleText}>Sign up with Google</Text>
-          </TouchableOpacity>
-
           <View style={styles.form}>
-
-            {/* 📸 Profile Image Upload */}
             <TouchableOpacity style={styles.imageContainer} onPress={pickImage}>
               <Image
                 source={
@@ -282,23 +269,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 30,
     color: '#e91e63',
-  },
-  googleButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#fff',
-    borderWidth: 1.5,
-    borderColor: '#e20069',
-    paddingVertical: 12,
-    borderRadius: 30,
-    marginBottom: 25,
-  },
-  googleIcon: { width: 24, height: 24, marginRight: 10 },
-  googleText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1f2937',
   },
   form: {
     backgroundColor: 'rgba(255,255,255,0.9)',

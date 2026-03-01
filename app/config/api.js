@@ -1,4 +1,4 @@
-const API_BASE_URL = ' https://jeana-unchiselled-remunerably.ngrok-free.dev';
+const API_BASE_URL = 'https://jeana-unchiselled-remunerably.ngrok-free.dev';
 
 export const API_ENDPOINTS = {
   AUTH: `${API_BASE_URL}/api/auth`,

@@ -4,8 +4,6 @@ import {
   StyleSheet,
   ScrollView,
   ImageBackground,
-  Image,
-  TouchableOpacity,
   Alert,
 } from 'react-native';
 import { TextInput, Button, Text } from 'react-native-paper';
@@ -38,26 +36,23 @@ const LoginScreen = ({ navigation }) => {
       console.log('📝 User role:', user.role);
       console.log('👤 User name:', user.fullName);
 
-      // Save token with Bearer prefix for future requests
       await AsyncStorage.setItem('authToken', `Bearer ${token}`);
       await AsyncStorage.setItem('user', JSON.stringify(user));
 
       Alert.alert('Success', message || 'Login successful');
 
-      // ✅ ROLE-BASED NAVIGATION
       if (user.role === 'admin') {
-        // Admin user - navigate to admin dashboard
-        console.log('🔐 Admin user detected - navigating to AdminDashboard');
         navigation.replace('AdminDashboard');
       } else {
-        // Regular user - navigate to home
-        console.log('👥 Regular user detected - navigating to Home');
         navigation.replace('Home');
       }
     } catch (error) {
       console.log('Login error:', error);
       if (error.response) {
-        Alert.alert('Login Failed', error.response.data.message || 'Invalid credentials');
+        Alert.alert(
+          'Login Failed',
+          error.response.data.message || 'Invalid credentials'
+        );
       } else {
         Alert.alert('Network Error', 'Please check your connection');
       }
@@ -82,17 +77,6 @@ const LoginScreen = ({ navigation }) => {
           <Text variant="bodyLarge" style={styles.subtitle}>
             Flower Shop
           </Text>
-
-          {/* Google Login Button (UI only for now) */}
-          <TouchableOpacity style={styles.googleButton}>
-            <Image
-              source={{
-                uri: 'https://i.pinimg.com/1200x/59/7f/11/597f11b631d7d94492f1adb95110cc44.jpg',
-              }}
-              style={styles.googleIcon}
-            />
-            <Text style={styles.googleText}>Login with Google</Text>
-          </TouchableOpacity>
 
           <View style={styles.form}>
             <TextInput
@@ -175,27 +159,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 30,
     color: '#e91e63',
-  },
-  googleButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#fff',
-    borderWidth: 1.5,
-    borderColor: '#e20069',
-    paddingVertical: 12,
-    borderRadius: 30,
-    marginBottom: 25,
-  },
-  googleIcon: {
-    width: 24,
-    height: 24,
-    marginRight: 10,
-  },
-  googleText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1f2937',
   },
   form: {
     backgroundColor: 'rgba(255,255,255,0.9)',

@@ -2,7 +2,6 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const cloudinary = require('cloudinary').v2;
-const admin = require('firebase-admin');
 require('dotenv').config();
 
 const app = express();

@@ -7,7 +7,6 @@ const upload = require('../middleware/upload');
 // Public routes
 router.post('/register', upload.single('picture'), authController.register);
 router.post('/login', authController.login);
-router.post('/google-login', authController.googleLogin);
 
 // Protected routes
 router.get('/me', authenticateToken, authController.getCurrentUser);
