@@ -37,7 +37,7 @@ const EditProfileScreen = ({ navigation }) => {
       const userData = await AsyncStorage.getItem('user');
       if (userData) {
         const parsedUser = JSON.parse(userData);
-        console.log('✅ Loaded user data:', parsedUser);
+        console.log('Loaded user data:', parsedUser);
         setUser({
           id: parsedUser.id || parsedUser._id || '',
           fullName: parsedUser.fullName || '',
@@ -51,7 +51,7 @@ const EditProfileScreen = ({ navigation }) => {
         navigation.goBack();
       }
     } catch (error) {
-      console.log('❌ Error fetching user data:', error);
+      console.log('Error fetching user data:', error);
       Alert.alert('Error', 'Failed to load user data');
     } finally {
       setInitialLoad(false);
@@ -73,7 +73,7 @@ const EditProfileScreen = ({ navigation }) => {
 
     if (!result.canceled) {
       setProfileImage(result.assets[0]);
-      console.log('✅ Image selected:', result.assets[0].uri);
+      console.log('Image selected:', result.assets[0].uri);
     }
   };
 
@@ -125,7 +125,7 @@ const EditProfileScreen = ({ navigation }) => {
         return;
       }
 
-      console.log('🗑️ Deleting account for user:', user.id);
+      console.log('Deleting account for user:', user.id);
 
       // Call delete account API
       const response = await axios.delete(
@@ -138,11 +138,11 @@ const EditProfileScreen = ({ navigation }) => {
         }
       );
 
-      console.log('✅ Account deleted successfully:', response.data);
+      console.log('Account deleted successfully:', response.data);
 
       // Clear all stored data
       await AsyncStorage.multiRemove(['authToken', 'user', 'refreshToken']);
-      console.log('💾 All data cleared from AsyncStorage');
+      console.log('All data cleared from AsyncStorage');
 
       Alert.alert('Account Deleted', 'Your account has been permanently deleted.', [
         {
@@ -151,7 +151,7 @@ const EditProfileScreen = ({ navigation }) => {
         },
       ]);
     } catch (error) {
-      console.log('❌ Delete account error:', {
+      console.log('Delete account error:', {
         message: error.message,
         status: error.response?.status,
         data: error.response?.data,
@@ -196,7 +196,7 @@ const EditProfileScreen = ({ navigation }) => {
     try {
       // Get auth token
       const token = await AsyncStorage.getItem('authToken');
-      console.log('🔐 Token exists:', !!token);
+      console.log('Token exists:', !!token);
       
       if (!token) {
         Alert.alert('Error', 'Not authenticated. Please login again.');
@@ -212,7 +212,7 @@ const EditProfileScreen = ({ navigation }) => {
       formData.append('address', user.address);
 
       // Log form data
-      console.log('📤 Sending form data:', {
+      console.log('Sending form data:', {
         fullName: user.fullName,
         email: user.email,
         phone: user.phone,
@@ -227,12 +227,12 @@ const EditProfileScreen = ({ navigation }) => {
           type: 'image/jpeg',
           name: profileImage.filename || 'profile.jpg',
         });
-        console.log('📸 New profile image included');
+        console.log('New profile image included');
       }
 
       // Update via API
-      console.log('🌐 Calling API:', `${API_ENDPOINTS.AUTH}/update-profile`);
-      console.log('🔑 Authorization header:', token.substring(0, 20) + '...');
+      console.log('Calling API:', `${API_ENDPOINTS.AUTH}/update-profile`);
+      console.log('Authorization header:', token.substring(0, 20) + '...');
 
       const response = await axios.put(
         `${API_ENDPOINTS.AUTH}/update-profile`,
@@ -246,7 +246,7 @@ const EditProfileScreen = ({ navigation }) => {
         }
       );
 
-      console.log('✅ Update successful:', response.data);
+      console.log('Update successful:', response.data);
 
       // Update AsyncStorage with new user data
       const updatedUser = {
@@ -258,7 +258,7 @@ const EditProfileScreen = ({ navigation }) => {
         picture: response.data.user?.picture || user.picture,
       };
 
-      console.log('💾 Saving to AsyncStorage:', updatedUser);
+      console.log('Saving to AsyncStorage:', updatedUser);
       await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
 
       // Reset image selection
@@ -267,7 +267,7 @@ const EditProfileScreen = ({ navigation }) => {
       Alert.alert('Success', 'Profile updated successfully');
       navigation.goBack();
     } catch (error) {
-      console.log('❌ Update error:', {
+      console.log('Update error:', {
         message: error.message,
         status: error.response?.status,
         data: error.response?.data,
@@ -279,11 +279,11 @@ const EditProfileScreen = ({ navigation }) => {
       if (error.response) {
         // Backend returned an error
         errorMessage = error.response.data?.message || error.response.statusText || 'Update failed';
-        console.log('📡 Backend error:', errorMessage);
+        console.log('Backend error:', errorMessage);
       } else if (error.request) {
         // Request made but no response
         errorMessage = 'No response from server. Check your connection.';
-        console.log('📡 No server response');
+        console.log('No server response');
       } else if (error.message === 'Network Error') {
         errorMessage = 'Network error. Please check your internet connection.';
       }
@@ -297,7 +297,7 @@ const EditProfileScreen = ({ navigation }) => {
   const getProfilePicture = () => {
     if (profileImage) return profileImage.uri;
     if (user.picture) return user.picture;
-    return 'https://via.placeholder.com/100?text=User';
+    return 'https://i.pinimg.com/736x/4f/a9/1d/4fa91db9a2e3f4077cb29e85ab3e270c.jpg';
   };
 
   const InputField = ({ label, value, onChangeText, placeholder, multiline = false, required = false }) => (

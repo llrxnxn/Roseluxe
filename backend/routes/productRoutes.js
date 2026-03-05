@@ -6,7 +6,7 @@ const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const cloudinary = require('cloudinary').v2;
 
 /* =========================================
-   🔥 CLOUDINARY STORAGE CONFIG
+   CLOUDINARY STORAGE CONFIG
 ========================================= */
 
 const storage = new CloudinaryStorage({
@@ -24,36 +24,36 @@ const upload = multer({
 });
 
 /* =========================================
-   📦 ROUTES - CORRECT ORDER (SPECIFIC FIRST)
+   ROUTES - CORRECT ORDER (SPECIFIC FIRST)
 ========================================= */
 
-// ✅ BULK DELETE - must come before /:id routes
+// BULK DELETE - must come before /:id routes
 router.post('/bulk-delete', productController.bulkDeleteProducts);
 
-// ✅ SEARCH - must come before /:id routes
+// SEARCH - must come before /:id routes
 router.get('/search/:query', productController.searchProducts);
 
-// ✅ GET SINGLE - uses :id parameter
+// GET SINGLE - uses :id parameter
 router.get('/:id', productController.getSingleProduct);
 
-// ✅ GET ALL - generic route, must come after specific ones
+// GET ALL - generic route, must come after specific ones
 router.get('/', productController.getAllProducts);
 
-// ✅ CREATE (with image upload)
+// CREATE (with image upload)
 router.post(
   '/',
   upload.array('images', 5), // field name must be "images"
   productController.createProduct
 );
 
-// ✅ UPDATE (optional new images)
+// UPDATE (optional new images)
 router.put(
   '/:id',
   upload.array('images', 5),
   productController.updateProduct
 );
 
-// ✅ DELETE single
+// DELETE single
 router.delete('/:id', productController.deleteProduct);
 
 module.exports = router;

@@ -26,7 +26,7 @@ export default function AdminAddProduct({ navigation, route }) {
     description: '',
     price: '',
     stock: '',
-    category: '', // ✅ Will store ObjectId
+    category: '', 
     images: [],
   });
 
@@ -52,7 +52,7 @@ export default function AdminAddProduct({ navigation, route }) {
       const data = await response.json();
 
       if (data.success) {
-        console.log('✅ Categories loaded:', data.categories.length);
+        console.log('Categories loaded:', data.categories.length);
         setCategories(data.categories || []);
       }
     } catch (error) {
@@ -71,11 +71,11 @@ export default function AdminAddProduct({ navigation, route }) {
         description: product.description || '',
         price: String(product.price || ''),
         stock: String(product.stock || ''),
-        category: product.category?._id || product.category || '', // ✅ Handle populated category
+        category: product.category?._id || product.category || '', 
         images: product.images || [],
       });
 
-      console.log('📝 Editing product:', {
+      console.log('Editing product:', {
         name: product.name,
         categoryId: product.category?._id || product.category,
         categoryName: product.category?.name || 'N/A',
@@ -106,7 +106,7 @@ export default function AdminAddProduct({ navigation, route }) {
         }));
 
         setSelectedImages([...selectedImages, ...newImages]);
-        console.log('✅ Images selected:', newImages.length);
+        console.log('Images selected:', newImages.length);
       }
     } catch (error) {
       console.error('Image picker error:', error);
@@ -128,14 +128,14 @@ export default function AdminAddProduct({ navigation, route }) {
 
   /* ================= SELECT CATEGORY ================= */
   const selectCategory = (categoryId, categoryName) => {
-    console.log('📌 Category selected:', {
+    console.log('Category selected:', {
       categoryId,
       categoryName,
     });
 
     setFormData((prev) => ({
       ...prev,
-      category: categoryId, // ✅ Store ObjectId
+      category: categoryId,
     }));
 
     setCategoryModalVisible(false);
@@ -185,9 +185,9 @@ export default function AdminAddProduct({ navigation, route }) {
       formDataObj.append('description', formData.description.trim());
       formDataObj.append('price', parseFloat(formData.price));
       formDataObj.append('stock', parseInt(formData.stock) || 0);
-      formDataObj.append('category', formData.category); // ✅ Send ObjectId
+      formDataObj.append('category', formData.category); 
 
-      console.log('📤 Submitting product:', {
+      console.log('Submitting product:', {
         name: formData.name,
         category: formData.category,
         newImages: selectedImages.length,
@@ -232,7 +232,7 @@ export default function AdminAddProduct({ navigation, route }) {
         );
       }
     } catch (error) {
-      console.error('❌ Submit error:', error);
+      console.error(' Submit error:', error);
       Alert.alert('Error', error.message || 'Failed to save product');
     } finally {
       setLoading(false);

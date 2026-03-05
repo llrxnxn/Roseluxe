@@ -10,7 +10,7 @@ const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const cloudinary = require('cloudinary').v2;
 
 /* =========================================
-   🔥 CLOUDINARY STORAGE CONFIG
+   CLOUDINARY STORAGE CONFIG
 ========================================= */
 
 const storage = new CloudinaryStorage({
@@ -28,40 +28,36 @@ const upload = multer({
 });
 
 /* =========================================
-   📦 ROUTES - CORRECT ORDER (SPECIFIC FIRST)
-=========================================
-   ⚠️ IMPORTANT: Routes are matched in order!
-   - Specific routes MUST come BEFORE :id routes
-   - Generic routes come LAST
-========================================= */
+   ROUTES - CORRECT ORDER (SPECIFIC FIRST)
+=========================================*/
 
-// ✅ SEARCH - specific route, comes FIRST
+// SEARCH - specific route, comes FIRST
 router.get('/search/:query', categoryController.searchCategories);
 
-// ✅ GET PRODUCTS BY CATEGORY - specific route with nested resource
+// GET PRODUCTS BY CATEGORY - specific route with nested resource
 router.get('/:categoryId/products', categoryController.getProductsByCategory);
 
-// ✅ GET SINGLE category - uses :id parameter, comes before POST
+// GET SINGLE category - uses :id parameter, comes before POST
 router.get('/:id', categoryController.getSingleCategory);
 
-// ✅ GET ALL categories - generic route, must come AFTER :id
+// GET ALL categories - generic route, must come AFTER :id
 router.get('/', categoryController.getAllCategories);
 
-// ✅ CREATE category (with image upload)
+// CREATE category (with image upload)
 router.post(
   '/',
   upload.single('image'), // field name must be "image"
   categoryController.createCategory
 );
 
-// ✅ UPDATE category (optional new image)
+// UPDATE category (optional new image)
 router.put(
   '/:id',
   upload.single('image'),
   categoryController.updateCategory
 );
 
-// ✅ DELETE category
+// DELETE category
 router.delete('/:id', categoryController.deleteCategory);
 
 module.exports = router;

@@ -21,7 +21,7 @@ const ProfileScreen = ({ navigation }) => {
     
     // Listen for focus event to refresh when coming back to this screen
     const unsubscribe = navigation.addListener('focus', () => {
-      console.log('📱 ProfileScreen focused - refreshing data');
+      console.log('ProfileScreen focused - refreshing data');
       fetchUserData();
     });
 
@@ -34,29 +34,29 @@ const ProfileScreen = ({ navigation }) => {
       const userData = await AsyncStorage.getItem('user');
       if (userData) {
         const parsedUser = JSON.parse(userData);
-        console.log('✅ User data loaded:', parsedUser);
+        console.log('User data loaded:', parsedUser);
         setUser(parsedUser);
       }
       setLoading(false);
     } catch (error) {
-      console.log('❌ Error fetching user data:', error);
+      console.log('Error fetching user data:', error);
       setLoading(false);
     }
   };
 
   const handleRefresh = async () => {
-    console.log('🔄 Refreshing user data...');
+    console.log('Refreshing user data...');
     setRefreshing(true);
     try {
       const userData = await AsyncStorage.getItem('user');
       if (userData) {
         const parsedUser = JSON.parse(userData);
-        console.log('✅ User data refreshed:', parsedUser);
+        console.log('User data refreshed:', parsedUser);
         setUser(parsedUser);
         Alert.alert('Success', 'Profile refreshed successfully');
       }
     } catch (error) {
-      console.log('❌ Error refreshing user data:', error);
+      console.log('Error refreshing user data:', error);
       Alert.alert('Error', 'Failed to refresh profile');
     } finally {
       setRefreshing(false);
@@ -135,11 +135,14 @@ const ProfileScreen = ({ navigation }) => {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       {/* USER HEADER */}
+      <View style={styles.logoSection}>
+                    <Text style={styles.logoText}>ROSELUXE</Text>
+                  </View>
       <View style={styles.userHeader}>
         {/* Profile Image */}
         <Image
           source={{
-            uri: user?.picture || 'https://via.placeholder.com/120?text=User',
+            uri: user?.picture || 'https://i.pinimg.com/736x/4f/a9/1d/4fa91db9a2e3f4077cb29e85ab3e270c.jpg',
           }}
           style={styles.profileImage}
           onError={() => console.log('Failed to load profile image')}
@@ -249,6 +252,24 @@ const styles = StyleSheet.create({
     paddingBottom: 80,
   },
 
+    logoSection: {
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderBottomColor: '#FFE8ED',
+    marginTop: 40,
+  },
+
+  logoText: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#B76E79',
+    letterSpacing: 3,
+    fontStyle: 'italic',
+  },
+  
   loadingText: {
     fontSize: 16,
     color: '#B76E79',

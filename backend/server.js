@@ -7,7 +7,7 @@ require('dotenv').config();
 const app = express();
 
 /* ===========================
-   🔥 CLOUDINARY CONFIG
+   CLOUDINARY CONFIG
 =========================== */
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -16,17 +16,7 @@ cloudinary.config({
 });
 
 /* ===========================
-   🔥 FIREBASE ADMIN CONFIG
-   (Make sure may serviceAccountKey.json ka)
-=========================== */
-// const serviceAccount = require('./config/serviceAccountKey.json');
-
-// admin.initializeApp({
-//   credential: admin.credential.cert(serviceAccount),
-// });
-
-/* ===========================
-   🔥 MIDDLEWARE
+    MIDDLEWARE
 =========================== */
 app.use(cors());
 
@@ -38,39 +28,40 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 /* ===========================
-   🔥 MONGODB CONNECTION
+   MONGODB CONNECTION
 =========================== */
 mongoose.connect(process.env.MONGODB_URI)
-  .then(() => console.log('✅ Connected to MongoDB'))
-  .catch(err => console.log('❌ MongoDB error:', err));
+  .then(() => console.log('Connected to MongoDB'))
+  .catch(err => console.log('MongoDB error:', err));
 
 /* ===========================
-   🔥 ROUTES
+   ROUTES
 =========================== */
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/products', require('./routes/productRoutes'));
 app.use('/api/categories', require('./routes/categoryRoutes'));
 app.use('/api/users', require('./routes/userRoutes'));
+app.use('/api/cart', require('./routes/cartRoutes'));
 /* ===========================
-   🔥 TEST ROUTE
+   TEST ROUTE
 =========================== */
 app.get('/', (req, res) => {
-  res.json({ message: '🌹 ROSELUXE Backend is running!' });
+  res.json({ message: 'ROSELUXE Backend is running!' });
 });
 
 /* ===========================
-   🔥 GLOBAL ERROR HANDLER
+   GLOBAL ERROR HANDLER
 =========================== */
 app.use((err, req, res, next) => {
-  console.error('🔥 Server Error:', err);
+  console.error('Server Error:', err);
   res.status(500).json({ message: 'Internal Server Error' });
 });
 
 /* ===========================
-   🔥 START SERVER
+   START SERVER
 =========================== */
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () =>
-  console.log(`🚀 Server running on port ${PORT}`)
+  console.log(`Server running on port ${PORT}`)
 );

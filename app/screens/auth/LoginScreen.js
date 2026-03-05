@@ -32,13 +32,18 @@ const LoginScreen = ({ navigation }) => {
 
       const { token, user, message } = response.data;
 
-      console.log('✅ Login successful');
-      console.log('📝 User role:', user.role);
-      console.log('👤 User name:', user.fullName);
+      console.log('Login successful');
+      console.log('User role:', user.role);
+      console.log('User name:', user.fullName);
 
-      await AsyncStorage.setItem('authToken', `Bearer ${token}`);
-      await AsyncStorage.setItem('user', JSON.stringify(user));
+      // Save token
+    await AsyncStorage.setItem("token", token);
 
+    // Save user
+    await AsyncStorage.setItem("user", JSON.stringify(user));
+
+    console.log("TOKEN:", token);
+console.log("USER:", user);
       Alert.alert('Success', message || 'Login successful');
 
       if (user.role === 'admin') {

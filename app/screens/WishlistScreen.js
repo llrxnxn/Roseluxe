@@ -31,7 +31,7 @@ const WishlistScreen = ({ navigation }) => {
     return unsubscribe;
   }, [navigation]);
 
-  // ✅ Load wishlist from AsyncStorage
+  // Load wishlist from AsyncStorage
   const loadWishlist = async () => {
     try {
       setLoading(true);
@@ -48,7 +48,7 @@ const WishlistScreen = ({ navigation }) => {
     }
   };
 
-  // ✅ Handle search/filter
+  // Handle search/filter
   const handleSearch = () => {
     if (searchQuery.trim()) {
       const filtered = wishlist.filter((item) =>
@@ -61,12 +61,12 @@ const WishlistScreen = ({ navigation }) => {
     }
   };
 
-  // ✅ Update filtered list when search changes
+  // Update filtered list when search changes
   useEffect(() => {
     handleSearch();
   }, [searchQuery, wishlist]);
 
-  // ✅ Remove from wishlist
+  // Remove from wishlist
   const removeFromWishlist = async (productId) => {
     const updatedWishlist = wishlist.filter((item) => item._id !== productId);
     setWishlist(updatedWishlist);
@@ -75,7 +75,7 @@ const WishlistScreen = ({ navigation }) => {
     Alert.alert('Removed', 'Item removed from wishlist');
   };
 
-  // ✅ Add to cart from wishlist
+  // Add to cart from wishlist
   const addToCart = async (product) => {
     try {
       const savedCart = await AsyncStorage.getItem('cart');
@@ -108,7 +108,7 @@ const WishlistScreen = ({ navigation }) => {
     }
   };
 
-  // ✅ Render wishlist item
+  // Render wishlist item
   const renderWishlistItem = ({ item }) => (
     <View style={styles.wishlistCard}>
       <View style={styles.cardImage}>

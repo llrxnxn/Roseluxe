@@ -1,511 +1,345 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
   StyleSheet,
-  ScrollView,
   Image,
   FlatList,
   Dimensions,
-  Animated,
-  ImageBackground,
   TouchableOpacity,
   Alert,
   ActivityIndicator,
   Modal,
-  TextInput,
   SafeAreaView,
-} from 'react-native';
-import { Button, Text } from 'react-native-paper';
-import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { API_ENDPOINTS } from '../config/api';
-import HeaderScreen from './HeaderScreen';
+  ScrollView,
+  TextInput,
+  Animated,
+} from "react-native";
+import { Text } from "react-native-paper";
+import axios from "axios";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
+import { useFocusEffect } from "@react-navigation/native";
+import { API_ENDPOINTS } from "../config/api";
+import HeaderScreen from "./HeaderScreen";
 
-const { width } = Dimensions.get('window');
+const { width } = Dimensions.get("window");
 const PRODUCT_CARD_WIDTH = (width - 40) / 2;
 
-// ✅ HELPER FUNCTION - Extract category name safely
 const getCategoryName = (category) => {
-  if (typeof category === 'object' && category?.name) {
-    return category.name;
-  }
-  return typeof category === 'string' ? category : 'N/A';
+  if (typeof category === "object" && category?.name) return category.name;
+  if (typeof category === "string") return category;
+  return "Other";
 };
 
+// Price ranges
+const PRICE_RANGES = [
+  { label: "All", min: 0, max: Infinity },
+  { label: "₱0 - ₱49", min: 0, max: 49 },
+  { label: "₱50 - ₱99", min: 50, max: 99 },
+  { label: "₱100 - ₱499", min: 100, max: 499 },
+  { label: "₱500+", min: 500, max: Infinity },
+];
+
 const ProductScreen = ({ navigation }) => {
+  // STATE
   const [products, setProducts] = useState([]);
   const [filteredProducts, setFilteredProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('products');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
+  
+  // Filter states
+  const [selectedCategory, setSelectedCategory] = useState("All");
+  const [selectedPriceRange, setSelectedPriceRange] = useState(0);
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+  const [showPriceDropdown, setShowPriceDropdown] = useState(false);
+  const [filterMode, setFilterMode] = useState(null);
+  
+  // Cart & Wishlist
   const [wishlist, setWishlist] = useState([]);
   const [cart, setCart] = useState([]);
   const [cartCount, setCartCount] = useState(0);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [userImage, setUserImage] = useState(null);
-
-  // Product Detail Modal
+  
+  // Modal states
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [showProductModal, setShowProductModal] = useState(false);
-  const [productQuantity, setProductQuantity] = useState(1);
+  const [quantity, setQuantity] = useState(1);
+  const [activeTab, setActiveTab] = useState("products");
+  
+  // Profile image
+  const [userImage, setUserImage] = useState(null);
 
-  useEffect(() => {
-    fetchProducts();
-    loadWishlistAndCart();
-    checkLoginStatus();
-  }, []);
-
-  // Update filtered products when search changes
-  useEffect(() => {
-    if (searchQuery.trim()) {
-      const filtered = products.filter((product) =>
-        product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        getCategoryName(product.category)
-          .toLowerCase()
-          .includes(searchQuery.toLowerCase())
-      );
-      setFilteredProducts(filtered);
-    } else {
-      setFilteredProducts(products);
-    }
-  }, [searchQuery, products]);
-
-  // ✅ Fetch products from backend
+  // ================================
+  // FETCH PRODUCTS
+  // ================================
   const fetchProducts = async () => {
     try {
       setLoading(true);
-      console.log('🔄 Fetching products from:', API_ENDPOINTS.PRODUCTS);
+      const res = await axios.get(API_ENDPOINTS.PRODUCTS);
+      const productData = Array.isArray(res.data)
+        ? res.data
+        : res.data?.products || [];
 
-      const response = await axios.get(`${API_ENDPOINTS.PRODUCTS}`);
-      console.log('📦 API Response products:', response.data);
+      setProducts(productData);
+      setFilteredProducts(productData);
 
-      // Handle both response formats
-      if (response.data?.products && Array.isArray(response.data.products)) {
-        console.log(`✅ Successfully loaded ${response.data.products.length} products`);
-        setProducts(response.data.products);
-        setFilteredProducts(response.data.products);
-      } else if (response.data && Array.isArray(response.data)) {
-        console.log(`✅ Successfully loaded ${response.data.length} products`);
-        setProducts(response.data);
-        setFilteredProducts(response.data);
-      } else {
-        console.warn('⚠️ Invalid products response format:', response.data);
-        setProducts([]);
-        setFilteredProducts([]);
-      }
-    } catch (error) {
-      console.error('❌ Error fetching products:', error);
-      Alert.alert('Error', 'Failed to load products. Please try again.');
-      setProducts([]);
-      setFilteredProducts([]);
+      const cats = ["All", ...new Set(productData.map((p) => getCategoryName(p.category)))];
+      setCategories(cats);
+    } catch (err) {
+      Alert.alert("Error", "Failed to load products");
     } finally {
       setLoading(false);
     }
   };
 
-  // ✅ Load wishlist and cart from AsyncStorage
-  const loadWishlistAndCart = async () => {
+  // ================================
+  // FETCH CART FROM DB
+  // ================================
+  const fetchCart = async () => {
     try {
-      const savedWishlist = await AsyncStorage.getItem('wishlist');
-      const savedCart = await AsyncStorage.getItem('cart');
+      const token = await AsyncStorage.getItem("token");
+      const userData = await AsyncStorage.getItem("user");
+      if (!token || !userData) return;
 
-      if (savedWishlist) {
-        setWishlist(JSON.parse(savedWishlist));
-      }
-      if (savedCart) {
-        const cartData = JSON.parse(savedCart);
-        setCart(cartData);
-        updateCartCount(cartData);
-      }
+      const user = JSON.parse(userData);
+      const res = await axios.get(`${API_ENDPOINTS.CART}/${user.id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const cartItems = res.data.items || [];
+      setCart(cartItems);
+      setCartCount(cartItems.reduce((t, i) => t + i.quantity, 0));
     } catch (error) {
-      console.log('Error loading wishlist/cart:', error);
+      console.log("Fetch cart error:", error.response?.data || error);
     }
   };
 
-  // ✅ Check login status
+  // ================================
+  // CHECK LOGIN
+  // ================================
   const checkLoginStatus = async () => {
     try {
-      const user = await AsyncStorage.getItem('user');
+      const user = await AsyncStorage.getItem("user");
+      setIsLoggedIn(!!user);
       if (user) {
-        setIsLoggedIn(true);
         const parsedUser = JSON.parse(user);
         if (parsedUser.picture) {
           setUserImage(parsedUser.picture);
         }
-        console.log('✅ User is logged in');
-      } else {
-        setIsLoggedIn(false);
       }
     } catch (error) {
-      console.log('Error checking login status:', error);
+      console.log("Error checking login status:", error);
       setIsLoggedIn(false);
     }
   };
 
-  // ✅ Add to wishlist
-  const handleAddToWishlist = async (product) => {
-    try {
-      const isInWishlist = wishlist.some((item) => item._id === product._id);
-
-      let updatedWishlist;
-      if (isInWishlist) {
-        updatedWishlist = wishlist.filter((item) => item._id !== product._id);
-        Alert.alert('Removed', `${product.name} removed from wishlist`);
-      } else {
-        updatedWishlist = [...wishlist, product];
-        Alert.alert('Added', `${product.name} added to wishlist`);
-      }
-
-      setWishlist(updatedWishlist);
-      await AsyncStorage.setItem('wishlist', JSON.stringify(updatedWishlist));
-      console.log('Wishlist updated:', updatedWishlist.length);
-    } catch (error) {
-      console.error('Error updating wishlist:', error);
-      Alert.alert('Error', 'Failed to update wishlist');
-    }
+  // ================================
+  // LOAD WISHLIST FROM STORAGE
+  // ================================
+  const loadWishlist = async () => {
+    const savedWishlist = await AsyncStorage.getItem("wishlist");
+    if (savedWishlist) setWishlist(JSON.parse(savedWishlist));
   };
 
-  // ✅ Add to cart
-  const handleAddToCart = async (product, quantity = 1) => {
-    try {
-      const existingItem = cart.find((item) => item._id === product._id);
+  // ================================
+  // LIFECYCLE
+  // ================================
+  useEffect(() => {
+    fetchProducts();
+    checkLoginStatus();
+    fetchCart();
+    loadWishlist();
+  }, []);
 
-      let updatedCart;
-      if (existingItem) {
-        updatedCart = cart.map((item) =>
-          item._id === product._id
-            ? { ...item, quantity: item.quantity + quantity }
-            : item
-        );
-        Alert.alert('Updated', `${product.name} quantity updated in cart`);
-      } else {
-        updatedCart = [...cart, { ...product, quantity }];
-        Alert.alert('Added', `${product.name} added to cart`);
-      }
+  useFocusEffect(
+    useCallback(() => {
+      checkLoginStatus();
+      fetchCart();
+    }, [])
+  );
 
-      setCart(updatedCart);
-      updateCartCount(updatedCart);
-      await AsyncStorage.setItem('cart', JSON.stringify(updatedCart));
-      console.log('Cart updated:', updatedCart.length, 'items');
-    } catch (error) {
-      console.error('Error adding to cart:', error);
-      Alert.alert('Error', 'Failed to add to cart');
-    }
-  };
+  // ================================
+  // SEARCH + FILTER (with category AND price)
+  // ================================
+  useEffect(() => {
+    let filtered = products;
 
-  // ✅ Update cart count
-  const updateCartCount = (cartData) => {
-    const count = cartData.reduce((total, item) => total + item.quantity, 0);
-    setCartCount(count);
-  };
-
-  // ✅ Handle Buy Now
-  const handleBuyNow = (product) => {
-    if (!isLoggedIn) {
-      Alert.alert(
-        'Login Required',
-        'Please login to proceed with purchase',
-        [
-          { text: 'Cancel', onPress: () => {} },
-          {
-            text: 'Login',
-            onPress: () => navigation.navigate('Login'),
-          },
-        ]
+    // Category filter
+    if (selectedCategory !== "All") {
+      filtered = filtered.filter(
+        (p) => getCategoryName(p.category) === selectedCategory
       );
-      return;
     }
 
-    // Add to cart and navigate
-    handleAddToCart(product, productQuantity);
-    setShowProductModal(false);
-    setProductQuantity(1);
+    // Price range filter
+    const priceRange = PRICE_RANGES[selectedPriceRange];
+    filtered = filtered.filter(
+      (p) => p.price >= priceRange.min && p.price < priceRange.max
+    );
 
-    // Navigate to Cart
-    setTimeout(() => {
-      navigation.navigate('Cart');
-    }, 500);
+    // Search filter
+    if (searchQuery.trim()) {
+      filtered = filtered.filter((p) =>
+        p.name.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+
+    setFilteredProducts(filtered);
+  }, [searchQuery, selectedCategory, selectedPriceRange, products]);
+
+  // ================================
+  // WISHLIST
+  // ================================
+  const toggleWishlist = async (product) => {
+    const exists = wishlist.some((w) => w._id === product._id);
+    const updated = exists
+      ? wishlist.filter((w) => w._id !== product._id)
+      : [...wishlist, product];
+
+    setWishlist(updated);
+    await AsyncStorage.setItem("wishlist", JSON.stringify(updated));
   };
 
-  // ✅ Render product card
-  const renderProductCard = ({ item }) => {
-    const isInWishlist = wishlist.some((w) => w._id === item._id);
+  // ================================
+  // ADD TO CART
+  // ================================
+  const handleAddToCart = async () => {
+    try {
+      if (!selectedProduct) return;
+
+      const token = await AsyncStorage.getItem("token");
+      const userData = await AsyncStorage.getItem("user");
+      if (!token || !userData) {
+        Alert.alert("Login Required");
+        navigation.navigate("Login");
+        return;
+      }
+
+      const user = JSON.parse(userData);
+      await axios.post(
+        `${API_ENDPOINTS.CART}/${user.id}`,
+        { productId: selectedProduct._id, quantity },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      await fetchCart();
+      setShowProductModal(false);
+      setQuantity(1);
+
+      Alert.alert("Success", "Item added to cart");
+    } catch (error) {
+      if (error.response?.status === 401) {
+        Alert.alert("Session Expired", "Please login again");
+        navigation.navigate("Login");
+      }
+      console.log("Add to cart error:", error.response?.data || error);
+    }
+  };
+
+  // ================================
+  // CATEGORY DROPDOWN ITEM
+  // ================================
+  const renderCategoryDropdownItem = ({ item }) => (
+    <TouchableOpacity
+      style={styles.dropdownItem}
+      onPress={() => {
+        setSelectedCategory(item);
+        setShowCategoryDropdown(false);
+        setFilterMode(null);
+      }}
+    >
+      <View style={styles.dropdownItemContent}>
+        {selectedCategory === item && (
+          <MaterialCommunityIcons name="check" size={18} color="#B76E79" />
+        )}
+        <Text
+          style={[
+            styles.dropdownItemText,
+            selectedCategory === item && styles.dropdownItemTextActive,
+          ]}
+        >
+          {item}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+
+  // ================================
+  // PRICE DROPDOWN ITEM
+  // ================================
+  const renderPriceDropdownItem = ({ item, index }) => (
+    <TouchableOpacity
+      style={styles.dropdownItem}
+      onPress={() => {
+        setSelectedPriceRange(index);
+        setShowPriceDropdown(false);
+        setFilterMode(null);
+      }}
+    >
+      <View style={styles.dropdownItemContent}>
+        {selectedPriceRange === index && (
+          <MaterialCommunityIcons name="check" size={18} color="#B76E79" />
+        )}
+        <Text
+          style={[
+            styles.dropdownItemText,
+            selectedPriceRange === index && styles.dropdownItemTextActive,
+          ]}
+        >
+          {item.label}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+
+  // ================================
+  // PRODUCT CARD
+  // ================================
+  const renderProduct = ({ item }) => {
+    const isWish = wishlist.some((w) => w._id === item._id);
 
     return (
       <TouchableOpacity
-        style={styles.productCard}
+        style={styles.card}
         onPress={() => {
           setSelectedProduct(item);
+          setQuantity(1);
           setShowProductModal(true);
-          setProductQuantity(1);
         }}
-        activeOpacity={0.8}
       >
-        {/* Product Image */}
         <View style={styles.imageContainer}>
           <Image
-            source={{ uri: item.images?.[0] || 'https://via.placeholder.com/200' }}
-            style={styles.productImage}
-            onError={() => console.warn('Image failed to load:', item.images?.[0])}
+            source={{ uri: item.images?.[0] || "https://via.placeholder.com/200" }}
+            style={styles.image}
           />
-
-          {/* Stock Badge */}
-          {item.stock > 0 ? (
-            <View style={styles.stockBadge}>
-              <Text style={styles.stockText}>In Stock</Text>
-            </View>
-          ) : (
-            <View style={[styles.stockBadge, { backgroundColor: '#999' }]}>
-              <Text style={styles.stockText}>Out of Stock</Text>
-            </View>
-          )}
-
-          {/* Wishlist Button */}
           <TouchableOpacity
-            style={styles.wishlistButton}
-            onPress={() => handleAddToWishlist(item)}
-            activeOpacity={0.7}
+            style={styles.wishlistBtn}
+            onPress={() => toggleWishlist(item)}
           >
-            <Text style={styles.wishlistIcon}>
-              {isInWishlist ? '❤️' : '🤍'}
-            </Text>
+            <MaterialCommunityIcons
+              name={isWish ? "heart" : "heart-outline"}
+              size={20}
+              color={isWish ? "#FF6B6B" : "#fff"}
+            />
           </TouchableOpacity>
         </View>
 
-        {/* Product Info */}
-        <View style={styles.productInfo}>
-          <Text style={styles.productName} numberOfLines={2}>
+        <View style={styles.info}>
+          <Text numberOfLines={2} style={styles.name}>
             {item.name}
           </Text>
-
-          <View style={styles.priceRow}>
-            <Text style={styles.price}>₱{item.price?.toFixed(2) || '0.00'}</Text>
-          </View>
-
-          {/* ✅ FIXED: Display category name safely */}
-          <Text style={styles.category} numberOfLines={1}>
-            {getCategoryName(item.category)}
-          </Text>
+          <Text style={styles.price}>₱{item.price.toLocaleString()}</Text>
+          <Text style={styles.category}>{getCategoryName(item.category)}</Text>
         </View>
-
-        {/* Add to Cart Button */}
-        <TouchableOpacity
-          style={[styles.addToCartBtn, item.stock === 0 && styles.disabledBtn]}
-          onPress={() => {
-            if (item.stock > 0) {
-              handleAddToCart(item, 1);
-            } else {
-              Alert.alert('Out of Stock', 'This product is not available');
-            }
-          }}
-          disabled={item.stock === 0}
-          activeOpacity={0.8}
-        >
-          <MaterialCommunityIcons
-            name="cart"
-            size={18}
-            color="white"
-          />
-          <Text style={styles.addToCartText}>Add to Cart</Text>
-        </TouchableOpacity>
       </TouchableOpacity>
     );
   };
 
-  // ✅ Product Detail Modal
-  const renderProductModal = () => {
-    if (!selectedProduct) return null;
-
-    const isInWishlist = wishlist.some((w) => w._id === selectedProduct._id);
-
-    return (
-      <Modal
-        visible={showProductModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => {
-          setShowProductModal(false);
-          setProductQuantity(1);
-        }}
-      >
-        <SafeAreaView style={styles.modalContainer}>
-          {/* Close Button */}
-          <View style={styles.modalHeader}>
-            <TouchableOpacity
-              onPress={() => {
-                setShowProductModal(false);
-                setProductQuantity(1);
-              }}
-              style={styles.closeButton}
-            >
-              <MaterialCommunityIcons name="close" size={28} color="#333" />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView contentContainerStyle={styles.modalContent}>
-            {/* Product Image Gallery */}
-            <View style={styles.modalImageContainer}>
-              <Image
-                source={{
-                  uri: selectedProduct.images?.[0] || 'https://via.placeholder.com/400',
-                }}
-                style={styles.modalImage}
-                resizeMode="contain"
-              />
-            </View>
-
-            {/* Product Details */}
-            <View style={styles.detailsContainer}>
-              <View style={styles.detailsHeader}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.modalProductName}>
-                    {selectedProduct.name}
-                  </Text>
-                  {/* ✅ FIXED: Display category name safely */}
-                  <Text style={styles.modalCategory}>
-                    {getCategoryName(selectedProduct.category)}
-                  </Text>
-                </View>
-
-                <TouchableOpacity
-                  onPress={() => handleAddToWishlist(selectedProduct)}
-                  style={styles.modalWishlistBtn}
-                >
-                  <Text style={styles.wishlistIconLarge}>
-                    {isInWishlist ? '❤️' : '🤍'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Price */}
-              <View style={styles.priceContainer}>
-                <Text style={styles.modalPrice}>
-                  ₱{selectedProduct.price?.toFixed(2) || '0.00'}
-                </Text>
-                {selectedProduct.stock > 0 ? (
-                  <View style={styles.inStockBadge}>
-                    <Text style={styles.inStockText}>In Stock</Text>
-                  </View>
-                ) : (
-                  <View style={styles.outOfStockBadge}>
-                    <Text style={styles.outOfStockText}>Out of Stock</Text>
-                  </View>
-                )}
-              </View>
-
-              {/* Description */}
-              <View style={styles.descriptionContainer}>
-                <Text style={styles.descriptionLabel}>Description</Text>
-                <Text style={styles.description}>
-                  {selectedProduct.description}
-                </Text>
-              </View>
-
-              {/* Quantity Selector */}
-              {selectedProduct.stock > 0 && (
-                <View style={styles.quantityContainer}>
-                  <Text style={styles.quantityLabel}>Quantity</Text>
-                  <View style={styles.quantitySelector}>
-                    <TouchableOpacity
-                      onPress={() =>
-                        setProductQuantity(
-                          productQuantity > 1 ? productQuantity - 1 : 1
-                        )
-                      }
-                      style={styles.quantityBtn}
-                    >
-                      <Text style={styles.quantityBtnText}>−</Text>
-                    </TouchableOpacity>
-
-                    <Text style={styles.quantityValue}>{productQuantity}</Text>
-
-                    <TouchableOpacity
-                      onPress={() =>
-                        setProductQuantity(
-                          productQuantity < selectedProduct.stock
-                            ? productQuantity + 1
-                            : selectedProduct.stock
-                        )
-                      }
-                      style={styles.quantityBtn}
-                    >
-                      <Text style={styles.quantityBtnText}>+</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
-
-              {/* Stock Info */}
-              <Text style={styles.stockInfo}>
-                {selectedProduct.stock > 0
-                  ? `${selectedProduct.stock} items available`
-                  : 'Out of Stock'}
-              </Text>
-            </View>
-          </ScrollView>
-
-          {/* Action Buttons */}
-          {selectedProduct.stock > 0 && (
-            <View style={styles.modalButtonsContainer}>
-              <TouchableOpacity
-                style={styles.modalCartBtn}
-                onPress={() => {
-                  handleAddToCart(selectedProduct, productQuantity);
-                  setShowProductModal(false);
-                  setProductQuantity(1);
-                }}
-              >
-                <MaterialCommunityIcons
-                  name="cart"
-                  size={20}
-                  color="white"
-                />
-                <Text style={styles.modalCartBtnText}>Add to Cart</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.modalBuyBtn}
-                onPress={() => handleBuyNow(selectedProduct)}
-              >
-                <Text style={styles.modalBuyBtnText}>Buy Now</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </SafeAreaView>
-      </Modal>
-    );
-  };
-
-  // ✅ Navigate handler
-  const handleNavigation = (tabName) => {
-    setActiveTab(tabName);
-    switch (tabName) {
-      case 'home':
-        navigation.navigate('Home');
-        break;
-      case 'products':
-        // Already on products
-        break;
-      case 'cart':
-        navigation.navigate('Cart');
-        break;
-      case 'wishlist':
-        navigation.navigate('Wishlist');
-        break;
-      case 'profile':
-        if (isLoggedIn) {
-          navigation.navigate('Profile');
-        } else {
-          navigation.navigate('Login');
-        }
-        break;
-      default:
-        break;
-    }
-  };
-
-  const NavItem = ({ name, icon, label, onPress, badge }) => (
+  // ================================
+  // NAVIGATION ITEM (HomeScreen style)
+  // ================================
+  const NavItem = ({ name, icon, onPress }) => (
     <TouchableOpacity
       style={styles.navItem}
       onPress={onPress}
@@ -517,560 +351,772 @@ const ProductScreen = ({ navigation }) => {
           activeTab === name && styles.navIconActive,
         ]}
       >
-        {name === 'profile' ? (
+        {name === "profile" ? (
           <Image
             source={{
-              uri: userImage || 'https://via.placeholder.com/40?text=User',
+              uri: userImage || "https://i.pinimg.com/736x/4f/a9/1d/4fa91db9a2e3f4077cb29e85ab3e270c.jpg",
             }}
             style={styles.profileImage}
+            onError={() => console.warn("Profile image failed to load")}
           />
         ) : (
-          <>
+          <View style={styles.iconWithBadge}>
             <MaterialCommunityIcons
               name={icon}
               size={24}
-              color={activeTab === name ? '#B76E79' : '#666'}
+              color={activeTab === name ? "#B76E79" : "#666"}
             />
-            {badge > 0 && (
+            {name === "cart" && cartCount > 0 && (
               <View style={styles.badge}>
-                <Text style={styles.badgeText}>{badge}</Text>
+                <Text style={styles.badgeText}>{cartCount}</Text>
               </View>
             )}
-          </>
+          </View>
         )}
       </View>
-      <Text
-        style={[
-          styles.navLabel,
-          activeTab === name && styles.navLabelActive,
-        ]}
-      >
-        {label}
-      </Text>
     </TouchableOpacity>
   );
 
-  return (
-    <View style={styles.mainContainer}>
-      {/* Header with Search */}
-      <HeaderScreen
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        onSearchSubmit={() => console.log('Search submitted:', searchQuery)}
-        onFilterPress={() => console.log('Filter pressed')}
-      />
+  // ================================
+  // PRODUCT MODAL
+  // ================================
+  const renderProductModal = () => {
+    if (!selectedProduct) return null;
+    const isWish = wishlist.some((w) => w._id === selectedProduct._id);
 
-      {/* Products List */}
+    return (
+      <Modal
+        visible={showProductModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowProductModal(false)}
+      >
+        <SafeAreaView style={styles.modalContainer}>
+          <ScrollView style={styles.modalContent}>
+            {/* Header */}
+            <View style={styles.modalHeader}>
+              <TouchableOpacity
+                onPress={() => setShowProductModal(false)}
+                style={styles.closeBtn}
+              >
+                <MaterialCommunityIcons name="close" size={28} color="#333" />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => toggleWishlist(selectedProduct)}
+                style={styles.wishlistModalBtn}
+              >
+                <MaterialCommunityIcons
+                  name={isWish ? "heart" : "heart-outline"}
+                  size={28}
+                  color={isWish ? "#FF6B6B" : "#333"}
+                />
+              </TouchableOpacity>
+            </View>
+
+            {/* Product Images - Swipeable */}
+            <FlatList
+              data={selectedProduct.images?.length ? selectedProduct.images : ["https://via.placeholder.com/300"]}
+              keyExtractor={(item, index) => index.toString()}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              renderItem={({ item }) => (
+                <Image
+                  source={{ uri: item }}
+                  style={[styles.modalImage, { width: width }]} // full width
+                />
+              )}
+            />
+
+            {/* Product Info */}
+            <View style={styles.modalInfo}>
+              <Text style={styles.modalName}>{selectedProduct.name}</Text>
+              <Text style={styles.modalPrice}>
+                ₱{selectedProduct.price.toLocaleString()}
+              </Text>
+              <Text style={styles.categoryBadge}>
+                {getCategoryName(selectedProduct.category)}
+              </Text>
+
+              <View style={styles.descriptionSection}>
+                <Text style={styles.sectionTitle}>Description</Text>
+                <Text style={styles.description}>
+                  {selectedProduct.description ||
+                    "Premium quality product with excellent features."}
+                </Text>
+              </View>
+
+              <View style={styles.quantitySection}>
+                <Text style={styles.sectionTitle}>Quantity</Text>
+                <View style={styles.quantityControl}>
+                  <TouchableOpacity
+                    style={styles.quantityBtn}
+                    onPress={() => setQuantity(Math.max(1, quantity - 1))}
+                  >
+                    <Text style={styles.quantityBtnText}>−</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.quantityValue}>{quantity}</Text>
+                  <TouchableOpacity
+                    style={styles.quantityBtn}
+                    onPress={() => setQuantity(quantity + 1)}
+                  >
+                    <Text style={styles.quantityBtnText}>+</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <View style={styles.totalSection}>
+                <Text style={styles.totalLabel}>Total Price</Text>
+                <Text style={styles.totalPrice}>
+                  ₱{(selectedProduct.price * quantity).toLocaleString()}
+                </Text>
+              </View>
+            </View>
+          </ScrollView>
+
+          {/* Add to Cart */}
+          <View style={styles.modalFooter}>
+            <TouchableOpacity
+              style={styles.addToCartBtn}
+              onPress={handleAddToCart}
+            >
+              <MaterialCommunityIcons
+                name="cart-plus"
+                size={24}
+                color="#fff"
+              />
+              <Text style={styles.addToCartText}>Add to Cart</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </Modal>
+    );
+  };
+
+  // ================================
+  // UI
+  // ================================
+  return (
+    <View style={{ flex: 1, backgroundColor: "#FFF5F7" }}>
+      <HeaderScreen searchQuery={searchQuery} onSearchChange={setSearchQuery} />
+
+      {/* FILTER SECTION - DROPDOWNS */}
+      <View style={styles.filterSection}>
+        <View style={styles.filterButtonsRow}>
+          {/* Category Filter Button */}
+          <TouchableOpacity
+            style={[
+              styles.filterButton,
+              selectedCategory !== "All" && styles.filterButtonActive,
+            ]}
+            onPress={() => {
+              if (filterMode === "category") {
+                setFilterMode(null);
+                setShowCategoryDropdown(false);
+              } else {
+                setFilterMode("category");
+                setShowCategoryDropdown(true);
+                setShowPriceDropdown(false);
+              }
+            }}
+          >
+            <MaterialCommunityIcons
+              name="filter-variant"
+              size={18}
+              color={selectedCategory !== "All" ? "#fff" : "#B76E79"}
+            />
+            <Text
+              style={[
+                styles.filterButtonText,
+                selectedCategory !== "All" && styles.filterButtonTextActive,
+              ]}
+            >
+              {selectedCategory === "All" ? "Categories" : selectedCategory}
+            </Text>
+            <MaterialCommunityIcons
+              name={showCategoryDropdown ? "chevron-up" : "chevron-down"}
+              size={18}
+              color={selectedCategory !== "All" ? "#fff" : "#B76E79"}
+            />
+          </TouchableOpacity>
+
+          {/* Price Filter Button */}
+          <TouchableOpacity
+            style={[
+              styles.filterButton,
+              selectedPriceRange !== 0 && styles.filterButtonActive,
+            ]}
+            onPress={() => {
+              if (filterMode === "price") {
+                setFilterMode(null);
+                setShowPriceDropdown(false);
+              } else {
+                setFilterMode("price");
+                setShowPriceDropdown(true);
+                setShowCategoryDropdown(false);
+              }
+            }}
+          >
+            <MaterialCommunityIcons
+              name="cash-multiple"
+              size={18}
+              color={selectedPriceRange !== 0 ? "#fff" : "#B76E79"}
+            />
+            <Text
+              style={[
+                styles.filterButtonText,
+                selectedPriceRange !== 0 && styles.filterButtonTextActive,
+              ]}
+            >
+              {PRICE_RANGES[selectedPriceRange].label === "All"
+                ? "Price"
+                : PRICE_RANGES[selectedPriceRange].label}
+            </Text>
+            <MaterialCommunityIcons
+              name={showPriceDropdown ? "chevron-up" : "chevron-down"}
+              size={18}
+              color={selectedPriceRange !== 0 ? "#fff" : "#B76E79"}
+            />
+          </TouchableOpacity>
+
+          {/* Reset Filter Button */}
+          {(selectedCategory !== "All" || selectedPriceRange !== 0) && (
+            <TouchableOpacity
+              style={styles.resetButton}
+              onPress={() => {
+                setSelectedCategory("All");
+                setSelectedPriceRange(0);
+                setFilterMode(null);
+                setShowCategoryDropdown(false);
+                setShowPriceDropdown(false);
+              }}
+            >
+              <MaterialCommunityIcons
+                name="close-circle"
+                size={18}
+                color="#999"
+              />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* CATEGORY DROPDOWN */}
+        {filterMode === "category" && (
+          <FlatList
+            data={categories}
+            renderItem={renderCategoryDropdownItem}
+            keyExtractor={(item) => item}
+            style={styles.dropdownContainer}
+            scrollEnabled={false}
+            nestedScrollEnabled={true}
+          />
+        )}
+
+        {/* PRICE DROPDOWN */}
+        {filterMode === "price" && (
+          <FlatList
+            data={PRICE_RANGES}
+            renderItem={({ item, index }) =>
+              renderPriceDropdownItem({ item, index })
+            }
+            keyExtractor={(item, index) => index.toString()}
+            style={styles.dropdownContainer}
+            scrollEnabled={false}
+            nestedScrollEnabled={true}
+          />
+        )}
+      </View>
+
+      {/* PRODUCTS LIST */}
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#B76E79" />
           <Text style={styles.loadingText}>Loading products...</Text>
         </View>
-      ) : filteredProducts.length > 0 ? (
+      ) : filteredProducts.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <MaterialCommunityIcons
+            name="shopping-outline"
+            size={48}
+            color="#ccc"
+          />
+          <Text style={styles.emptyText}>No products found</Text>
+          <Text style={styles.emptySubtext}>Try adjusting your filters</Text>
+        </View>
+      ) : (
         <FlatList
           data={filteredProducts}
-          renderItem={renderProductCard}
-          keyExtractor={(item) => item._id?.toString()}
+          renderItem={renderProduct}
+          keyExtractor={(item) => item._id}
           numColumns={2}
-          columnWrapperStyle={styles.columnWrapper}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
+          columnWrapperStyle={{
+            justifyContent: "space-between",
+            paddingHorizontal: 10,
+          }}
+          contentContainerStyle={{ paddingBottom: 100, paddingTop: 8 }}
         />
-      ) : (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyIcon}>🌸</Text>
-          <Text style={styles.emptyText}>
-            {searchQuery ? 'No products found' : 'No products available'}
-          </Text>
-          {searchQuery && (
-            <TouchableOpacity
-              onPress={() => setSearchQuery('')}
-              style={styles.clearSearchBtn}
-            >
-              <Text style={styles.clearSearchText}>Clear Search</Text>
-            </TouchableOpacity>
-          )}
-        </View>
       )}
 
-      {/* Product Detail Modal */}
+      {/* PRODUCT MODAL */}
       {renderProductModal()}
 
-      {/* Bottom Navigation */}
+      {/* BOTTOM NAV */}
       <View style={styles.bottomNav}>
         <NavItem
           name="home"
           icon="home"
-          label="Home"
-          onPress={() => handleNavigation('home')}
+          onPress={() => {
+            setActiveTab("home");
+            navigation.navigate("Home");
+          }}
         />
         <NavItem
           name="products"
           icon="flower"
-          label="Products"
-          onPress={() => handleNavigation('products')}
+          onPress={() => {
+            setActiveTab("products");
+            navigation.navigate("Products");
+          }}
         />
         <NavItem
           name="cart"
           icon="cart"
-          label="Cart"
-          onPress={() => handleNavigation('cart')}
-          badge={cartCount}
+          onPress={() => {
+            setActiveTab("cart");
+            if (isLoggedIn) {
+              navigation.navigate("Cart");
+            } else {
+              Alert.alert("Login Required", "Please login first");
+              navigation.navigate("Login");
+            }
+          }}
         />
         <NavItem
           name="wishlist"
           icon="heart"
-          label="Wishlist"
-          onPress={() => handleNavigation('wishlist')}
-          badge={wishlist.length}
+          onPress={() => {
+            setActiveTab("wishlist");
+            navigation.navigate("Wishlist");
+          }}
         />
         <NavItem
           name="profile"
           icon="account-circle"
-          label="Profile"
-          onPress={() => handleNavigation('profile')}
+          onPress={() => {
+            setActiveTab("profile");
+            if (isLoggedIn) {
+              navigation.navigate("Profile");
+            } else {
+              navigation.navigate("Login");
+            }
+          }}
         />
       </View>
     </View>
   );
 };
 
+export default ProductScreen;
+
+// =============================
+// STYLES
+// =============================
+
 const styles = StyleSheet.create({
-  mainContainer: {
+  /* FILTER SECTION */
+  filterSection: {
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e8e8e8",
+  },
+
+  filterButtonsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 10,
+  },
+
+  filterButton: {
     flex: 1,
-    backgroundColor: '#FFF5F7',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#f5f5f5",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "#e8e8e8",
+    gap: 6,
   },
 
-  // Loading State
-  loadingContainer: {
+  filterButtonActive: {
+    backgroundColor: "#B76E79",
+    borderColor: "#B76E79",
+  },
+
+  filterButtonText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#333",
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    textAlign: "center",
   },
 
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: '#B76E79',
-    fontWeight: '500',
+  filterButtonTextActive: {
+    color: "#fff",
   },
 
-  // Product Grid
-  columnWrapper: {
-    justifyContent: 'space-between',
-    paddingHorizontal: 10,
-    marginBottom: 10,
+  resetButton: {
+    padding: 8,
+    borderRadius: 6,
+    backgroundColor: "#f0f0f0",
   },
 
-  listContent: {
-    paddingTop: 8,
-    paddingBottom: 100,
+  dropdownContainer: {
+    backgroundColor: "#f9f9f9",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e8e8e8",
+    maxHeight: 250,
   },
 
-  // Product Card
-  productCard: {
+  dropdownItem: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 0.5,
+    borderBottomColor: "#e8e8e8",
+  },
+
+  dropdownItemContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  dropdownItemText: {
+    fontSize: 13,
+    color: "#555",
+    fontWeight: "500",
+    flex: 1,
+  },
+
+  dropdownItemTextActive: {
+    color: "#B76E79",
+    fontWeight: "700",
+  },
+
+  /* PRODUCT CARD */
+  card: {
     width: PRODUCT_CARD_WIDTH,
-    backgroundColor: 'white',
+    backgroundColor: "#fff",
     borderRadius: 12,
-    overflow: 'hidden',
-    elevation: 2,
-    marginBottom: 8,
+    marginBottom: 12,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
   },
 
   imageContainer: {
-    position: 'relative',
-    width: '100%',
-    height: 180,
-    backgroundColor: '#f5f5f5',
+    width: "100%",
+    height: 160,
+    backgroundColor: "#f5f5f5",
+    position: "relative",
   },
 
-  productImage: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
+  image: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
   },
 
-  stockBadge: {
-    position: 'absolute',
-    top: 8,
-    left: 8,
-    backgroundColor: '#4CAF50',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-
-  stockText: {
-    color: 'white',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-
-  wishlistButton: {
-    position: 'absolute',
+  wishlistBtn: {
+    position: "absolute",
     top: 8,
     right: 8,
     width: 36,
     height: 36,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
     borderRadius: 18,
-    elevation: 3,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    justifyContent: "center",
+    alignItems: "center",
   },
 
-  wishlistIcon: {
-    fontSize: 20,
-  },
-
-  // Product Info
-  productInfo: {
+  info: {
     padding: 10,
   },
 
-  productName: {
+  name: {
+    fontWeight: "600",
     fontSize: 13,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 6,
-  },
-
-  priceRow: {
-    marginBottom: 4,
+    color: "#333",
+    lineHeight: 16,
   },
 
   price: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#B76E79',
+    fontWeight: "700",
+    color: "#B76E79",
+    fontSize: 14,
+    marginTop: 4,
   },
 
   category: {
     fontSize: 11,
-    color: '#999',
-    fontWeight: '500',
+    color: "#999",
+    marginTop: 4,
+    fontWeight: "500",
   },
 
-  // Add to Cart Button
-  addToCartBtn: {
-    flexDirection: 'row',
-    backgroundColor: '#B76E79',
-    marginHorizontal: 8,
-    marginBottom: 8,
-    paddingVertical: 8,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
+  /* LOADING & EMPTY */
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
   },
 
-  disabledBtn: {
-    backgroundColor: '#ccc',
+  loadingText: {
+    marginTop: 12,
+    color: "#999",
+    fontSize: 13,
   },
 
-  addToCartText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: '600',
-    marginLeft: 6,
-  },
-
-  // Empty State
   emptyContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  emptyIcon: {
-    fontSize: 64,
-    marginBottom: 12,
+    justifyContent: "center",
+    alignItems: "center",
   },
 
   emptyText: {
-    fontSize: 18,
-    color: '#999',
-    marginBottom: 20,
-    textAlign: 'center',
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#999",
+    marginTop: 12,
   },
 
-  clearSearchBtn: {
-    backgroundColor: '#B76E79',
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-    borderRadius: 8,
+  emptySubtext: {
+    fontSize: 12,
+    color: "#bbb",
+    marginTop: 4,
   },
 
-  clearSearchText: {
-    color: 'white',
-    fontWeight: '600',
-  },
-
-  // Product Detail Modal
+  /* MODAL */
   modalContainer: {
     flex: 1,
-    backgroundColor: '#FFF5F7',
-  },
-
-  modalHeader: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-
-  closeButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "#fff",
   },
 
   modalContent: {
-    paddingBottom: 20,
+    flex: 1,
   },
 
-  modalImageContainer: {
-    width: '100%',
-    height: 300,
-    backgroundColor: 'white',
-    justifyContent: 'center',
-    alignItems: 'center',
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+
+  closeBtn: {
+    padding: 6,
+  },
+
+  wishlistModalBtn: {
+    padding: 6,
   },
 
   modalImage: {
-    width: '90%',
-    height: '100%',
+    width: "100%",
+    height: 350,
+    resizeMode: "cover",
+    backgroundColor: "#f5f5f5",
   },
 
-  detailsContainer: {
-    backgroundColor: 'white',
-    marginHorizontal: 12,
-    marginTop: 12,
-    borderRadius: 12,
+  modalInfo: {
     padding: 16,
-    elevation: 2,
   },
 
-  detailsHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-  },
-
-  modalProductName: {
+  modalName: {
     fontSize: 22,
-    fontWeight: '700',
-    color: '#333',
-    marginBottom: 4,
-  },
-
-  modalCategory: {
-    fontSize: 13,
-    color: '#999',
-    fontWeight: '500',
-  },
-
-  modalWishlistBtn: {
-    padding: 8,
-  },
-
-  wishlistIconLarge: {
-    fontSize: 28,
-  },
-
-  priceContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
+    fontWeight: "700",
+    color: "#333",
+    lineHeight: 28,
   },
 
   modalPrice: {
     fontSize: 28,
-    fontWeight: '700',
-    color: '#B76E79',
-    marginRight: 12,
+    fontWeight: "800",
+    color: "#B76E79",
+    marginTop: 12,
   },
 
-  inStockBadge: {
-    backgroundColor: '#E8F5E9',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
+  categoryBadge: {
+    fontSize: 11,
+    color: "#fff",
+    backgroundColor: "#B76E79",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: "flex-start",
+    marginTop: 8,
+    overflow: "hidden",
+    fontWeight: "600",
   },
 
-  inStockText: {
-    color: '#4CAF50',
-    fontWeight: '600',
-    fontSize: 12,
+  descriptionSection: {
+    marginTop: 20,
   },
 
-  outOfStockBadge: {
-    backgroundColor: '#FFEBEE',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-
-  outOfStockText: {
-    color: '#F44336',
-    fontWeight: '600',
-    fontSize: 12,
-  },
-
-  descriptionContainer: {
-    marginBottom: 16,
-  },
-
-  descriptionLabel: {
+  sectionTitle: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
+    fontWeight: "700",
+    color: "#333",
     marginBottom: 8,
   },
 
   description: {
-    fontSize: 14,
-    color: '#666',
-    lineHeight: 20,
+    fontSize: 13,
+    color: "#666",
+    lineHeight: 18,
   },
 
-  quantityContainer: {
-    marginBottom: 12,
+  quantitySection: {
+    marginTop: 16,
   },
 
-  quantityLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-  },
-
-  quantitySelector: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#ddd',
+  quantityControl: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f5f5f5",
     borderRadius: 8,
-    height: 40,
+    width: 120,
   },
 
   quantityBtn: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    height: '100%',
+    width: 40,
+    height: 40,
+    justifyContent: "center",
+    alignItems: "center",
   },
 
   quantityBtnText: {
     fontSize: 20,
-    fontWeight: '600',
-    color: '#B76E79',
+    fontWeight: "600",
+    color: "#B76E79",
   },
 
   quantityValue: {
     flex: 1,
-    textAlign: 'center',
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
+    textAlign: "center",
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#333",
   },
 
-  stockInfo: {
+  totalSection: {
+    marginTop: 16,
+    paddingBottom: 120,
+  },
+
+  totalLabel: {
     fontSize: 12,
-    color: '#999',
-    fontStyle: 'italic',
+    color: "#999",
+    fontWeight: "500",
   },
 
-  modalButtonsContainer: {
-    flexDirection: 'row',
+  totalPrice: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: "#B76E79",
+    marginTop: 4,
+  },
+
+  /* MODAL FOOTER */
+  modalFooter: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: "#fff",
     paddingHorizontal: 16,
     paddingVertical: 12,
-    gap: 12,
-    backgroundColor: 'white',
     borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
+    borderTopColor: "#e0e0e0",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 5,
   },
 
-  modalCartBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    backgroundColor: '#B76E79',
+  addToCartBtn: {
+    backgroundColor: "#B76E79",
     paddingVertical: 14,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
+    borderRadius: 10,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#B76E79",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
   },
 
-  modalCartBtnText: {
-    color: 'white',
-    fontWeight: '600',
+  addToCartText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "700",
     marginLeft: 8,
   },
 
-  modalBuyBtn: {
-    flex: 1,
-    backgroundColor: '#E8B4BA',
-    paddingVertical: 14,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  modalBuyBtnText: {
-    color: '#B76E79',
-    fontWeight: '700',
-    fontSize: 15,
-  },
-
-  // Bottom Navigation
+  /* BOTTOM NAV - HomeScreen Style */
   bottomNav: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
     height: 70,
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
+    borderTopColor: "#f0f0f0",
+    flexDirection: "row",
+    justifyContent: "space-around",
+    alignItems: "center",
     elevation: 8,
     paddingBottom: 8,
   },
 
   navItem: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    height: '100%',
+    justifyContent: "center",
+    alignItems: "center",
+    height: "100%",
   },
 
   navIconContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     width: 40,
     height: 40,
     borderRadius: 20,
-    position: 'relative',
   },
 
   navIconActive: {
-    backgroundColor: '#FFE8ED',
+    backgroundColor: "#FFE8ED",
   },
 
-  navLabel: {
-    fontSize: 11,
-    marginTop: 4,
-    color: '#666',
-    fontWeight: '500',
-  },
-
-  navLabelActive: {
-    color: '#B76E79',
-    fontWeight: '700',
+  iconWithBadge: {
+    position: "relative",
+    justifyContent: "center",
+    alignItems: "center",
   },
 
   profileImage: {
@@ -1078,28 +1124,26 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 18,
     borderWidth: 2,
-    borderColor: '#B76E79',
+    borderColor: "#B76E79",
   },
 
   badge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    backgroundColor: '#F44336',
+    position: "absolute",
+    top: -6,
+    right: -6,
+    backgroundColor: "#FF6B6B",
     borderRadius: 10,
-    width: 20,
+    minWidth: 20,
     height: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     borderWidth: 2,
-    borderColor: 'white',
+    borderColor: "#fff",
   },
 
   badgeText: {
-    color: 'white',
-    fontSize: 10,
-    fontWeight: '700',
+    color: "#fff",
+    fontSize: 9,
+    fontWeight: "700",
   },
 });
-
-export default ProductScreen;

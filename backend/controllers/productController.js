@@ -7,7 +7,7 @@ const cloudinary = require('cloudinary').v2;
 exports.getAllProducts = async (req, res) => {
   try {
     const products = await Product.find({ isActive: true })
-      .populate('category', 'name description image') // ✅ POPULATE CATEGORY
+      .populate('category', 'name description image')
       .sort({ createdAt: -1 })
       .lean();
 
@@ -32,7 +32,7 @@ exports.getAllProducts = async (req, res) => {
 exports.getSingleProduct = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id)
-      .populate('category', 'name description image') // ✅ POPULATE CATEGORY
+      .populate('category', 'name description image')
       .lean();
 
     if (!product || !product.isActive) {
@@ -57,13 +57,13 @@ exports.getSingleProduct = async (req, res) => {
 };
 
 /* =========================================
-   CREATE PRODUCT - ✅ FIXED VERSION
+   CREATE PRODUCT - FIXED VERSION
 ========================================= */
 exports.createProduct = async (req, res) => {
   try {
     const { name, description, price, stock, category } = req.body;
 
-    // ✅ BETTER VALIDATION with clear messages
+    // BETTER VALIDATION with clear messages
     if (!name || !description || !price || !category) {
       return res.status(400).json({
         success: false,
@@ -101,7 +101,7 @@ exports.createProduct = async (req, res) => {
       });
     }
 
-    // ✅ Log for debugging
+    // Log for debugging
     console.log('Creating product with data:', {
       name,
       description,
@@ -118,17 +118,17 @@ exports.createProduct = async (req, res) => {
       description: description.trim(),
       price: parsedPrice,
       stock: productStock,
-      category: category, // ✅ Now expects ObjectId
+      category: category, 
       images: imageUrls,
     });
 
     await newProduct.save();
 
-    // ✅ Populate category before response
+    
     const savedProduct = await Product.findById(newProduct._id)
       .populate('category', 'name description image');
 
-    console.log('✅ Product created successfully:', newProduct._id);
+    console.log('Product created successfully:', newProduct._id);
 
     res.status(201).json({
       success: true,
@@ -136,7 +136,7 @@ exports.createProduct = async (req, res) => {
       product: savedProduct,
     });
   } catch (error) {
-    console.error('❌ Error creating product:', error);
+    console.error('Error creating product:', error);
     res.status(500).json({
       success: false,
       message: 'Error creating product',
@@ -146,11 +146,11 @@ exports.createProduct = async (req, res) => {
 };
 
 /* =========================================
-   UPDATE PRODUCT - ✅ FIXED VERSION
+   UPDATE PRODUCT
 ========================================= */
 exports.updateProduct = async (req, res) => {
   try {
-    console.log('\n🟦 UPDATE PRODUCT REQUEST');
+    console.log('UPDATE PRODUCT REQUEST');
     console.log('Product ID:', req.params.id);
     console.log('Body:', req.body);
     console.log('Files:', req.files?.length || 0);
@@ -158,11 +158,11 @@ exports.updateProduct = async (req, res) => {
     const { name, description, price, stock, category } = req.body;
     const productId = req.params.id;
 
-    // ✅ Find product (use exec() to ensure it's not lean)
+    
     const product = await Product.findById(productId);
 
     if (!product) {
-      console.error('❌ Product not found:', productId);
+      console.error('Product not found:', productId);
       return res.status(404).json({
         success: false,
         message: 'Product not found',
@@ -170,16 +170,16 @@ exports.updateProduct = async (req, res) => {
     }
 
     if (!product.isActive) {
-      console.error('❌ Product is not active:', productId);
+      console.error('Product is not active:', productId);
       return res.status(404).json({
         success: false,
         message: 'Product not found or is inactive',
       });
     }
 
-    console.log('✅ Product found:', product._id);
+    console.log('Product found:', product._id);
 
-    // ✅ Update fields (only if provided)
+    
     if (name && name.trim()) {
       product.name = name.trim();
       console.log('Updated name to:', product.name);
@@ -214,17 +214,17 @@ exports.updateProduct = async (req, res) => {
       console.log('Updated stock to:', product.stock);
     }
 
-    // ✅ Update category (now as ObjectId)
+    
     if (category && category.trim()) {
-      product.category = category.trim(); // ✅ Expects ObjectId
+      product.category = category.trim();
       console.log('Updated category to:', product.category);
     }
 
-    // ✅ Handle image updates
+    
     if (req.files && req.files.length > 0) {
-      console.log('🖼️  Updating images...');
+      console.log('Updating images...');
 
-      // Delete old images from Cloudinary
+     
       console.log('Deleting old images from Cloudinary...');
       for (const imageUrl of product.images) {
         try {
@@ -232,26 +232,26 @@ exports.updateProduct = async (req, res) => {
           await cloudinary.uploader.destroy(`roseluxe/products/${publicId}`);
           console.log('Deleted from Cloudinary:', publicId);
         } catch (err) {
-          console.log('⚠️  Cloudinary delete error:', err.message);
+          console.log('Cloudinary delete error:', err.message);
         }
       }
 
-      // Set new images
+      
       product.images = req.files.map((file) => file.path);
       console.log('Set new images:', product.images.length, 'images');
     } else {
       console.log('No new images provided, keeping old images');
     }
 
-    // ✅ CRITICAL: Save the product
-    console.log('💾 Saving product to MongoDB...');
+    
+    console.log('Saving product to MongoDB...');
     await product.save();
-    console.log('✅ Product saved successfully!');
+    console.log('Product saved successfully!');
 
-    // ✅ Verify it was saved and populate category
+    
     const savedProduct = await Product.findById(productId)
       .populate('category', 'name description image');
-    console.log('✅ Verified saved product:', savedProduct.name);
+    console.log('Verified saved product:', savedProduct.name);
 
     res.json({
       success: true,
@@ -259,7 +259,7 @@ exports.updateProduct = async (req, res) => {
       product: savedProduct,
     });
   } catch (error) {
-    console.error('❌ Error updating product:', error);
+    console.error('Error updating product:', error);
     console.error('Error stack:', error.stack);
     res.status(500).json({
       success: false,
@@ -375,7 +375,7 @@ exports.searchProducts = async (req, res) => {
         { description: { $regex: query, $options: 'i' } },
       ],
     })
-      .populate('category', 'name description image') // ✅ POPULATE CATEGORY
+      .populate('category', 'name description image')
       .sort({ createdAt: -1 })
       .lean();
 
@@ -401,18 +401,18 @@ exports.getProductsByCategory = async (req, res) => {
   try {
     const { categoryId } = req.params;
 
-    console.log('🟦 Getting products for category:', categoryId);
+    console.log('Getting products for category:', categoryId);
 
-    // ✅ FIXED: Query by ObjectId reference
+    
     const products = await Product.find({
       isActive: true,
-      category: categoryId, // ✅ Now compares ObjectId directly
+      category: categoryId,
     })
-      .populate('category', 'name description image') // ✅ POPULATE CATEGORY
+      .populate('category', 'name description image')
       .sort({ createdAt: -1 })
       .lean();
 
-    console.log('✅ Found products:', products.length);
+    console.log('Found products:', products.length);
 
     res.json({
       success: true,

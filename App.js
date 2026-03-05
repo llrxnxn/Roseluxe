@@ -9,7 +9,7 @@ import RegisterScreen from './app/screens/auth/RegisterScreen';
 import ProfileScreen from './app/screens/ProfileScreen';
 import EditProfileScreen from './app/screens/EditProfileScreen';
 import AboutUsScreen from './app/screens/AboutUsScreen';
-import TransactionHistoryScreen from './app/screens/TransactionHistoryScreen';
+// import TransactionHistoryScreen from './app/screens/TransactionHistoryScreen';
 import CartScreen from './app/screens/CartScreen';
 import WishlistScreen from './app/screens/WishlistScreen';
 
@@ -38,14 +38,14 @@ export default function App() {
           
           if (parsedUser.role === 'admin') {
             setInitialRoute('AdminDashboard');
-            console.log('🔐 Admin detected - setting initial route to AdminDashboard');
+            console.log('Admin detected - setting initial route to AdminDashboard');
           } else {
             setInitialRoute('Home');
-            console.log('👥 Customer detected - setting initial route to Home');
+            console.log('Customer detected - setting initial route to Home');
           }
         } else {
           setInitialRoute('Login');
-          console.log('❌ No user found - setting initial route to Login');
+          console.log('No user found - setting initial route to Login');
         }
       } catch (error) {
         console.log('Error checking user role:', error);
@@ -59,7 +59,7 @@ export default function App() {
   }, []);
 
   if (isLoading) {
-    return null; // Or a splash screen
+    return null;
   }
 
   return (
@@ -78,7 +78,7 @@ export default function App() {
         <Stack.Screen name="Profile" component={ProfileScreen} />
         <Stack.Screen name="EditProfile" component={EditProfileScreen} />
         <Stack.Screen name="AboutUs" component={AboutUsScreen} />
-        <Stack.Screen name="TransactionHistory" component={TransactionHistoryScreen} />
+        {/* <Stack.Screen name="TransactionHistory" component={TransactionHistoryScreen} /> */}
         <Stack.Screen name="Cart" component={CartScreen} />
         <Stack.Screen name="Wishlist" component={WishlistScreen} />
 

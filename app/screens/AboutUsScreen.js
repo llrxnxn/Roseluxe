@@ -12,6 +12,9 @@ const AboutUsScreen = ({ navigation }) => {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       {/* HEADER */}
+      <View style={styles.logoSection}>
+              <Text style={styles.logoText}>ROSELUXE</Text>
+            </View>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <MaterialCommunityIcons name="arrow-left" size={28} color="#B76E79" />
@@ -122,6 +125,28 @@ const AboutUsScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
+  container: {
+    backgroundColor: '#FFF5F7',
+    paddingBottom: 12,
+  },
+
+    logoSection: {
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderBottomColor: '#FFE8ED',
+    marginTop: 40,
+  },
+
+  logoText: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#B76E79',
+    letterSpacing: 3,
+    fontStyle: 'italic',
+  },
   container: {
     flexGrow: 1,
     backgroundColor: '#FFF5F7',

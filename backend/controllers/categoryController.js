@@ -1,7 +1,3 @@
-// ============================================
-// File: backend/controllers/categoryController.js
-// ============================================
-
 const Category = require('../models/Category');
 const Product = require('../models/Products');
 const cloudinary = require('cloudinary').v2;

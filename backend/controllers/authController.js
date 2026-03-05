@@ -228,7 +228,7 @@ exports.deleteAccount = async (req, res) => {
   try {
     const userId = req.user.id;
 
-    console.log(`🗑️ Attempting to delete account for user: ${userId}`);
+    console.log(`Attempting to delete account for user: ${userId}`);
 
     const user = await User.findById(userId);
 
@@ -242,18 +242,18 @@ exports.deleteAccount = async (req, res) => {
         // Extract public_id from Cloudinary URL
         const publicId = `roseluxe_profiles/user_${userId}`;
         
-        console.log(`📸 Deleting image from Cloudinary: ${publicId}`);
+        console.log(`Deleting image from Cloudinary: ${publicId}`);
         await cloudinary.uploader.destroy(publicId);
-        console.log(`✅ Image deleted from Cloudinary`);
+        console.log(`Image deleted from Cloudinary`);
       } catch (cloudinaryError) {
-        console.log(`⚠️ Warning: Could not delete image from Cloudinary:`, cloudinaryError);
+        console.log(`Warning: Could not delete image from Cloudinary:`, cloudinaryError);
         // Don't fail the entire deletion if image deletion fails
       }
     }
 
     // Delete user from database
     await User.findByIdAndDelete(userId);
-    console.log(`✅ User account deleted: ${userId}`);
+    console.log(`User account deleted: ${userId}`);
 
     res.json({
       message: 'Account deleted successfully',
@@ -263,7 +263,7 @@ exports.deleteAccount = async (req, res) => {
       },
     });
   } catch (error) {
-    console.log('❌ Delete account error:', error);
+    console.log('Delete account error:', error);
     res.status(500).json({ message: 'Failed to delete account: ' + error.message });
   }
 };

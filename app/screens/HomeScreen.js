@@ -15,6 +15,7 @@ import { Button, Text } from 'react-native-paper';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { useFocusEffect } from '@react-navigation/native';
 import { API_ENDPOINTS } from '../config/api';
 
 const { width } = Dimensions.get('window');
@@ -25,6 +26,7 @@ const HomeScreen = ({ navigation }) => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userImage, setUserImage] = useState(null);
   const [loadingCategories, setLoadingCategories] = useState(true);
+  const [activeIndex, setActiveIndex] = useState(0);
   const flatListRef = useRef();
   const scrollX = useRef(new Animated.Value(0)).current;
   const currentIndex = useRef(0);
@@ -36,7 +38,13 @@ const HomeScreen = ({ navigation }) => {
     checkLoginStatus();
   }, []);
 
-  // FIXED: Proper auto-scroll with interval management
+  useFocusEffect(
+  React.useCallback(() => {
+    checkLoginStatus();
+  }, [])
+);
+
+  //Auto-Scroll
   useEffect(() => {
     if (categories.length > 0) {
       startAutoScroll();
@@ -49,31 +57,35 @@ const HomeScreen = ({ navigation }) => {
   }, [categories]);
 
   const startAutoScroll = () => {
-    // Clear any existing interval
     if (autoScrollInterval.current) {
       clearInterval(autoScrollInterval.current);
     }
 
     autoScrollInterval.current = setInterval(() => {
-      currentIndex.current =
+      const newIndex =
         currentIndex.current === categories.length - 1
           ? 0
           : currentIndex.current + 1;
 
-      console.log(`📸 Auto-scrolling to index: ${currentIndex.current}`);
+      currentIndex.current = newIndex;
+      setActiveIndex(newIndex);
+
+      // console.log(`Auto-scrolling to index: ${currentIndex.current}`);
 
       if (flatListRef.current) {
-        flatListRef.current.scrollToIndex({
+        try {
+        flatListRef.current?.scrollToIndex({
           index: currentIndex.current,
           animated: true,
-          viewPosition: 0.5, // Center the item
+          viewPosition: 0.5,
         });
+      } catch (err) {
+        console.warn("Scroll error:", err);
       }
-    }, 4000); // Increased to 4 seconds for better animation
+      }
+    }, 4000);
   };
 
-  // CRITICAL FIX: Backend returns { categories: [...], count, success }
-  // NOT just an array!
   const fetchCategories = async () => {
     try {
       setLoadingCategories(true);
@@ -83,12 +95,10 @@ const HomeScreen = ({ navigation }) => {
       
       console.log('API Response:', response.data);
 
-      // FIX: Access response.data.categories (the actual array)
       if (response.data?.categories && Array.isArray(response.data.categories)) {
         console.log(`Successfully loaded ${response.data.categories.length} categories`);
         setCategories(response.data.categories);
       } else if (response.data && Array.isArray(response.data)) {
-        // Fallback: in case API returns array directly
         console.log(`Successfully loaded ${response.data.length} categories`);
         setCategories(response.data);
       } else {
@@ -119,10 +129,10 @@ const HomeScreen = ({ navigation }) => {
         if (parsedUser.picture) {
           setUserImage(parsedUser.picture);
         }
-        console.log('✅ User is logged in');
+        console.log('User is logged in');
       } else {
         setIsLoggedIn(false);
-        console.log('❌ User is not logged in');
+        console.log('User is not logged in');
       }
     } catch (error) {
       console.log('Error checking login status:', error);
@@ -131,13 +141,13 @@ const HomeScreen = ({ navigation }) => {
   };
 
   const handleOrderNow = () => {
-    console.log('🛒 ORDER NOW clicked - isLoggedIn:', isLoggedIn);
+    console.log('ORDER NOW clicked - isLoggedIn:', isLoggedIn);
     
     if (isLoggedIn) {
-      console.log('✅ User logged in - navigating to Products');
+      console.log('User logged in - navigating to Products');
       navigation.navigate('Products');
     } else {
-      console.log('❌ User not logged in - navigating to Login');
+      console.log('User not logged in - navigating to Login');
       navigation.navigate('Login');
     }
   };
@@ -151,8 +161,13 @@ const HomeScreen = ({ navigation }) => {
         navigation.navigate('Products');
         break;
       case 'cart':
+      if (isLoggedIn) {
         navigation.navigate('Cart');
-        break;
+      } else {
+        Alert.alert("Login Required","Please login first");
+        navigation.navigate('Login');
+      }
+      break;
       case 'wishlist':
         navigation.navigate('Wishlist');
         break;
@@ -168,7 +183,6 @@ const HomeScreen = ({ navigation }) => {
     }
   };
 
-  // IMPROVED: Better category card rendering
   const renderCategory = ({ item, index }) => (
     <View
       style={{
@@ -179,17 +193,17 @@ const HomeScreen = ({ navigation }) => {
     >
       <View style={styles.categoryCard}>
         <Image
-          source={{ uri: item.image }}
+          source={{ uri: item.image || "https://i.pinimg.com/474x/7a/61/d7/7a61d7fc07c26a896cdd10ca2cdff0e6.jpg"}}
           style={styles.categoryImage}
-          onError={() => console.warn('⚠️ Image failed to load:', item.image)}
-          onLoad={() => console.log(`✅ Image loaded for: ${item.name}`)}
+          onError={() => console.warn('Image failed to load:', item.image)}
+          onLoad={() => console.log(`Image loaded for: ${item.name}`)}
         />
         <Text style={styles.categoryName}>{item.name}</Text>
       </View>
     </View>
   );
 
-  const NavItem = ({ name, icon, label, onPress }) => (
+  const NavItem = ({ name, icon, onPress }) => (
     <TouchableOpacity
       style={styles.navItem}
       onPress={onPress}
@@ -204,7 +218,7 @@ const HomeScreen = ({ navigation }) => {
         {name === 'profile' ? (
           <Image
             source={{
-              uri: userImage || 'https://via.placeholder.com/40?text=User',
+              uri: userImage ? userImage :  'https://i.pinimg.com/736x/4f/a9/1d/4fa91db9a2e3f4077cb29e85ab3e270c.jpg',
             }}
             style={styles.profileImage}
             onError={() => console.warn('Profile image failed to load')}
@@ -217,14 +231,6 @@ const HomeScreen = ({ navigation }) => {
           />
         )}
       </View>
-      <Text
-        style={[
-          styles.navLabel,
-          activeTab === name && styles.navLabelActive,
-        ]}
-      >
-        {label}
-      </Text>
     </TouchableOpacity>
   );
 
@@ -232,7 +238,6 @@ const HomeScreen = ({ navigation }) => {
     <View style={styles.mainContainer}>
       <ScrollView contentContainerStyle={styles.container}>
         
-        {/* 🌸 BANNER WITH SATIN BOUQUET IMAGE */}
         <ImageBackground
           source={{
             uri: 'https://i.pinimg.com/736x/0a/94/3b/0a943b5227739fe79dfc6a14c711bf77.jpg',
@@ -258,7 +263,6 @@ const HomeScreen = ({ navigation }) => {
           </View>
         </ImageBackground>
 
-        {/* 🌷 CATEGORIES SECTION */}
         <View style={styles.section}>
           <Text variant="headlineSmall" style={styles.sectionTitle}>
             Flower Categories
@@ -288,14 +292,13 @@ const HomeScreen = ({ navigation }) => {
                   { useNativeDriver: false }
                 )}
               />
-              {/* ✅ ADDED: Visual indicator of carousel position */}
               <View style={styles.dotsContainer}>
                 {categories.map((_, index) => (
                   <View
                     key={index}
                     style={[
                       styles.dot,
-                      currentIndex.current === index && styles.dotActive,
+                      activeIndex === index && styles.dotActive,
                     ]}
                   />
                 ))}
@@ -310,7 +313,6 @@ const HomeScreen = ({ navigation }) => {
           )}
         </View>
 
-        {/* 🌟 WHY CHOOSE US */}
         <View style={styles.section}>
           <Text variant="headlineSmall" style={styles.sectionTitle}>
             Why Choose ROSELUXE?
@@ -337,36 +339,30 @@ const HomeScreen = ({ navigation }) => {
         </View>
       </ScrollView>
 
-      {/* 📱 BOTTOM NAVIGATION */}
       <View style={styles.bottomNav}>
         <NavItem
           name="home"
           icon="home"
-          label="Home"
           onPress={() => handleNavigation('home')}
         />
         <NavItem
           name="products"
           icon="flower"
-          label="Products"
           onPress={() => handleNavigation('products')}
         />
         <NavItem
           name="cart"
           icon="cart"
-          label="Cart"
           onPress={() => handleNavigation('cart')}
         />
         <NavItem
           name="wishlist"
           icon="heart"
-          label="Wishlist"
           onPress={() => handleNavigation('wishlist')}
         />
         <NavItem
           name="profile"
           icon="account-circle"
-          label="Profile"
           onPress={() => handleNavigation('profile')}
         />
       </View>
@@ -558,18 +554,6 @@ const styles = StyleSheet.create({
 
   navIconActive: {
     backgroundColor: '#FFE8ED',
-  },
-
-  navLabel: {
-    fontSize: 11,
-    marginTop: 4,
-    color: '#666',
-    fontWeight: '500',
-  },
-
-  navLabelActive: {
-    color: '#B76E79',
-    fontWeight: '700',
   },
 
   profileImage: {
