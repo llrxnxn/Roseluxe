@@ -26,7 +26,7 @@ export default function AdminAddProduct({ navigation, route }) {
     description: '',
     price: '',
     stock: '',
-    category: '', 
+    category: '',
     images: [],
   });
 
@@ -34,8 +34,11 @@ export default function AdminAddProduct({ navigation, route }) {
   const [selectedImages, setSelectedImages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loadingCategories, setLoadingCategories] = useState(true);
-  const [errors, setErrors] = useState({});
+  
+  // UI-only errors (for form display)
+  const [clientErrors, setClientErrors] = useState({});
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
+  const [imagePickerModalVisible, setImagePickerModalVisible] = useState(false);
 
   useEffect(() => {
     fetchCategories();
@@ -71,27 +74,130 @@ export default function AdminAddProduct({ navigation, route }) {
         description: product.description || '',
         price: String(product.price || ''),
         stock: String(product.stock || ''),
-        category: product.category?._id || product.category || '', 
+        category: product.category?._id || product.category || '',
         images: product.images || [],
       });
 
       console.log('Editing product:', {
         name: product.name,
         categoryId: product.category?._id || product.category,
-        categoryName: product.category?.name || 'N/A',
       });
     }
   };
 
-  /* ================= PICK IMAGES ================= */
-  const pickImages = async () => {
+  /* ================= REQUEST CAMERA PERMISSION ================= */
+  const requestCameraPermission = async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permission Denied',
+          'Camera permission is required to take photos.'
+        );
+        return false;
+      }
+      return true;
+    } catch (error) {
+      console.error('Camera permission error:', error);
+      return false;
+    }
+  };
+
+  /* ================= REQUEST MEDIA LIBRARY PERMISSION ================= */
+  const requestMediaLibraryPermission = async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-
       if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'Camera roll permission is required');
-        return;
+        Alert.alert(
+          'Permission Denied',
+          'Media library permission is required to access photos.'
+        );
+        return false;
       }
+      return true;
+    } catch (error) {
+      console.error('Media library permission error:', error);
+      return false;
+    }
+  };
+
+  /* ================= DETECT IMAGE MIME TYPE ================= */
+  const detectImageMimeType = (uri) => {
+    // Extract file extension from URI
+    const uriParts = uri.split('.');
+    const fileExtension = uriParts[uriParts.length - 1].toLowerCase();
+
+    // Map extensions to MIME types
+    const mimeTypeMap = {
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      png: 'image/png',
+      gif: 'image/gif',
+      webp: 'image/webp',
+      bmp: 'image/bmp',
+      svg: 'image/svg+xml',
+      tiff: 'image/tiff',
+      ico: 'image/x-icon',
+      heic: 'image/heic',
+    };
+
+    return mimeTypeMap[fileExtension] || 'image/jpeg'; // Default to JPEG
+  };
+
+  /* ================= GET FILE EXTENSION FROM MIME TYPE ================= */
+  const getFileExtensionFromMimeType = (mimeType) => {
+    const extensionMap = {
+      'image/jpeg': 'jpg',
+      'image/png': 'png',
+      'image/gif': 'gif',
+      'image/webp': 'webp',
+      'image/bmp': 'bmp',
+      'image/svg+xml': 'svg',
+      'image/tiff': 'tiff',
+      'image/x-icon': 'ico',
+      'image/heic': 'heic',
+    };
+
+    return extensionMap[mimeType] || 'jpg';
+  };
+
+  /* ================= TAKE PHOTO WITH CAMERA ================= */
+  const takePhoto = async () => {
+    try {
+      const hasPermission = await requestCameraPermission();
+      if (!hasPermission) return;
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.8,
+        aspect: [4, 3],
+      });
+
+      if (!result.canceled) {
+        const uri = result.assets[0].uri;
+        const mimeType = detectImageMimeType(uri);
+
+        const newImage = {
+          uri,
+          mimeType,
+          isNew: true,
+        };
+
+        setSelectedImages([...selectedImages, newImage]);
+        console.log('Photo taken successfully:', { uri, mimeType });
+        setImagePickerModalVisible(false);
+      }
+    } catch (error) {
+      console.error('Camera error:', error);
+      Alert.alert('Error', 'Failed to take photo. Please try again.');
+    }
+  };
+
+  /* ================= PICK IMAGES FROM LIBRARY ================= */
+  const pickImageFromLibrary = async () => {
+    try {
+      const hasPermission = await requestMediaLibraryPermission();
+      if (!hasPermission) return;
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -100,13 +206,21 @@ export default function AdminAddProduct({ navigation, route }) {
       });
 
       if (!result.canceled) {
-        const newImages = result.assets.map((asset) => ({
-          uri: asset.uri,
-          isNew: true,
-        }));
+        const newImages = result.assets.map((asset) => {
+          const mimeType = detectImageMimeType(asset.uri);
+          return {
+            uri: asset.uri,
+            mimeType,
+            isNew: true,
+          };
+        });
 
         setSelectedImages([...selectedImages, ...newImages]);
-        console.log('Images selected:', newImages.length);
+        console.log('Images selected:', {
+          count: newImages.length,
+          types: newImages.map(img => img.mimeType),
+        });
+        setImagePickerModalVisible(false);
       }
     } catch (error) {
       console.error('Image picker error:', error);
@@ -127,11 +241,8 @@ export default function AdminAddProduct({ navigation, route }) {
   };
 
   /* ================= SELECT CATEGORY ================= */
-  const selectCategory = (categoryId, categoryName) => {
-    console.log('Category selected:', {
-      categoryId,
-      categoryName,
-    });
+  const selectCategory = (categoryId) => {
+    console.log('Category selected:', categoryId);
 
     setFormData((prev) => ({
       ...prev,
@@ -141,66 +252,81 @@ export default function AdminAddProduct({ navigation, route }) {
     setCategoryModalVisible(false);
 
     // Clear category error if exists
-    if (errors.category) {
-      setErrors((prev) => ({
+    if (clientErrors.category) {
+      setClientErrors((prev) => ({
         ...prev,
         category: '',
       }));
     }
   };
 
-  /* ================= VALIDATION ================= */
-  const validateForm = () => {
-    const newErrors = {};
+  /* ================= CLIENT-SIDE VALIDATION (UI ONLY) ================= */
+  const validateFormUI = () => {
+    const errors = {};
 
-    if (!formData.name.trim()) newErrors.name = 'Product name is required';
-    if (!formData.description.trim())
-      newErrors.description = 'Description is required';
-    if (!formData.price || isNaN(parseFloat(formData.price)))
-      newErrors.price = 'Valid price is required';
-    if (!formData.category) newErrors.category = 'Category is required';
+    // Basic client-side checks for UX
+    if (!formData.name.trim()) {
+      errors.name = 'Product name is required';
+    }
+
+    if (!formData.description.trim()) {
+      errors.description = 'Description is required';
+    }
+
+    if (!formData.price) {
+      errors.price = 'Price is required';
+    }
+
+    if (!formData.category) {
+      errors.category = 'Category is required';
+    }
 
     // Image validation
     const totalImages = formData.images.length + selectedImages.length;
     if (totalImages === 0) {
-      newErrors.images = 'At least one image is required';
+      errors.images = 'At least one image is required';
     }
 
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    setClientErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
   /* ================= SUBMIT FORM ================= */
   const handleSubmit = async () => {
-    if (!validateForm()) {
+    // UI validation first
+    if (!validateFormUI()) {
       Alert.alert('Validation Error', 'Please fill all required fields');
       return;
     }
 
     try {
       setLoading(true);
+      setClientErrors({}); // Clear previous errors
 
+      // Prepare FormData
       const formDataObj = new FormData();
       formDataObj.append('name', formData.name.trim());
       formDataObj.append('description', formData.description.trim());
-      formDataObj.append('price', parseFloat(formData.price));
-      formDataObj.append('stock', parseInt(formData.stock) || 0);
-      formDataObj.append('category', formData.category); 
+      formDataObj.append('price', formData.price);
+      formDataObj.append('stock', formData.stock || '0');
+      formDataObj.append('category', formData.category);
+
+      // Add only new images with correct MIME type
+      selectedImages.forEach((img, index) => {
+        const fileExtension = getFileExtensionFromMimeType(img.mimeType);
+        formDataObj.append('images', {
+          uri: img.uri,
+          type: img.mimeType,
+          name: `product-${Date.now()}-${index}.${fileExtension}`,
+        });
+      });
 
       console.log('Submitting product:', {
         name: formData.name,
         category: formData.category,
         newImages: selectedImages.length,
+        newImageTypes: selectedImages.map(img => img.mimeType),
         existingImages: formData.images.length,
-      });
-
-      // Add new images
-      selectedImages.forEach((img) => {
-        formDataObj.append('images', {
-          uri: img.uri,
-          type: 'image/jpeg',
-          name: `product-${Date.now()}.jpg`,
-        });
       });
 
       const method = isEditing ? 'PUT' : 'POST';
@@ -215,7 +341,15 @@ export default function AdminAddProduct({ navigation, route }) {
 
       const data = await response.json();
 
+      // Handle server validation errors
       if (!response.ok) {
+        // If backend returns field-specific errors
+        if (data.errors && typeof data.errors === 'object') {
+          setClientErrors(data.errors);
+          Alert.alert('Validation Error', 'Please fix the errors below');
+          return;
+        }
+        
         throw new Error(data.message || 'Failed to save product');
       }
 
@@ -232,7 +366,7 @@ export default function AdminAddProduct({ navigation, route }) {
         );
       }
     } catch (error) {
-      console.error(' Submit error:', error);
+      console.error('Submit error:', error);
       Alert.alert('Error', error.message || 'Failed to save product');
     } finally {
       setLoading(false);
@@ -246,8 +380,9 @@ export default function AdminAddProduct({ navigation, route }) {
       [field]: value,
     }));
 
-    if (errors[field]) {
-      setErrors((prev) => ({
+    // Clear error on input change
+    if (clientErrors[field]) {
+      setClientErrors((prev) => ({
         ...prev,
         [field]: '',
       }));
@@ -268,7 +403,7 @@ export default function AdminAddProduct({ navigation, route }) {
         style={[
           styles.input,
           multiline && { height: 80, textAlignVertical: 'top' },
-          errors[field] && styles.inputError,
+          clientErrors[field] && styles.inputError,
         ]}
         placeholder={placeholder}
         value={formData[field]}
@@ -276,11 +411,88 @@ export default function AdminAddProduct({ navigation, route }) {
         multiline={multiline}
         keyboardType={keyboardType}
         editable={!loading}
+        placeholderTextColor="#999"
       />
-      {errors[field] && (
-        <Text style={styles.errorText}>{errors[field]}</Text>
+      {clientErrors[field] && (
+        <Text style={styles.errorText}>{clientErrors[field]}</Text>
       )}
     </View>
+  );
+
+  /* ================= IMAGE PICKER MODAL ================= */
+  const ImagePickerModal = () => (
+    <Modal
+      visible={imagePickerModalVisible}
+      animationType="slide"
+      transparent={true}
+      onRequestClose={() => setImagePickerModalVisible(false)}
+    >
+      <SafeAreaView style={styles.pickerModalContainer}>
+        <View style={styles.pickerModalContent}>
+          <View style={styles.pickerModalHeader}>
+            <Text style={styles.pickerModalTitle}>Add Product Image</Text>
+            <TouchableOpacity
+              onPress={() => setImagePickerModalVisible(false)}
+            >
+              <MaterialCommunityIcons
+                name="close"
+                size={28}
+                color="#333"
+              />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.pickerOptionsContainer}>
+            {/* TAKE PHOTO OPTION */}
+            <TouchableOpacity
+              style={styles.pickerOption}
+              onPress={takePhoto}
+            >
+              <View style={styles.pickerOptionIcon}>
+                <MaterialCommunityIcons
+                  name="camera"
+                  size={48}
+                  color="#fff"
+                />
+              </View>
+              <View style={styles.pickerOptionText}>
+                <Text style={styles.pickerOptionTitle}>Take a Photo</Text>
+                <Text style={styles.pickerOptionDesc}>
+                  Use your camera to capture a new photo
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* UPLOAD FROM LIBRARY OPTION */}
+            <TouchableOpacity
+              style={styles.pickerOption}
+              onPress={pickImageFromLibrary}
+            >
+              <View style={styles.pickerOptionIcon}>
+                <MaterialCommunityIcons
+                  name="image-multiple"
+                  size={48}
+                  color="#fff"
+                />
+              </View>
+              <View style={styles.pickerOptionText}>
+                <Text style={styles.pickerOptionTitle}>Upload Photos</Text>
+                <Text style={styles.pickerOptionDesc}>
+                  Choose from your photo gallery (any image type)
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity
+            style={styles.pickerCancelBtn}
+            onPress={() => setImagePickerModalVisible(false)}
+          >
+            <Text style={styles.pickerCancelText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    </Modal>
   );
 
   /* ================= LOADING ================= */
@@ -362,10 +574,10 @@ export default function AdminAddProduct({ navigation, route }) {
               </View>
             ))}
 
-            {/* Add Image Button */}
+            {/* Add Image Button - Opens Modal */}
             <TouchableOpacity
               style={styles.addImageBtn}
-              onPress={pickImages}
+              onPress={() => setImagePickerModalVisible(true)}
               disabled={loading}
             >
               <MaterialCommunityIcons
@@ -373,11 +585,12 @@ export default function AdminAddProduct({ navigation, route }) {
                 size={32}
                 color="#B76E79"
               />
+              <Text style={styles.addImageBtnText}>Add Image</Text>
             </TouchableOpacity>
           </View>
 
-          {errors.images && (
-            <Text style={styles.errorText}>{errors.images}</Text>
+          {clientErrors.images && (
+            <Text style={styles.errorText}>{clientErrors.images}</Text>
           )}
         </View>
 
@@ -418,7 +631,7 @@ export default function AdminAddProduct({ navigation, route }) {
             <TouchableOpacity
               style={[
                 styles.categoryButton,
-                errors.category && styles.inputError,
+                clientErrors.category && styles.inputError,
               ]}
               onPress={() => setCategoryModalVisible(true)}
               disabled={loading}
@@ -440,8 +653,8 @@ export default function AdminAddProduct({ navigation, route }) {
                 color="#B76E79"
               />
             </TouchableOpacity>
-            {errors.category && (
-              <Text style={styles.errorText}>{errors.category}</Text>
+            {clientErrors.category && (
+              <Text style={styles.errorText}>{clientErrors.category}</Text>
             )}
           </View>
         </View>
@@ -515,9 +728,7 @@ export default function AdminAddProduct({ navigation, route }) {
                       formData.category === category._id &&
                         styles.categoryItemSelected,
                     ]}
-                    onPress={() =>
-                      selectCategory(category._id, category.name)
-                    }
+                    onPress={() => selectCategory(category._id)}
                   >
                     <Image
                       source={{ uri: category.image }}
@@ -545,6 +756,9 @@ export default function AdminAddProduct({ navigation, route }) {
           </View>
         </SafeAreaView>
       </Modal>
+
+      {/* ================= IMAGE PICKER MODAL ================= */}
+      <ImagePickerModal />
     </SafeAreaView>
   );
 }
@@ -622,6 +836,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#fff5f7',
+  },
+  addImageBtnText: {
+    color: '#B76E79',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 4,
   },
 
   // ========== FORM INPUTS ==========
@@ -705,6 +925,80 @@ const styles = StyleSheet.create({
   cancelButtonText: {
     color: '#666',
     fontSize: 16,
+    fontWeight: '600',
+  },
+
+  // ========== IMAGE PICKER MODAL ==========
+  pickerModalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  pickerModalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: 20,
+  },
+  pickerModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  pickerModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#333',
+  },
+  pickerOptionsContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 20,
+    gap: 12,
+  },
+  pickerOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+    borderRadius: 12,
+    padding: 16,
+    gap: 16,
+  },
+  pickerOptionIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 12,
+    backgroundColor: '#B76E79',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pickerOptionText: {
+    flex: 1,
+  },
+  pickerOptionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#333',
+    marginBottom: 4,
+  },
+  pickerOptionDesc: {
+    fontSize: 13,
+    color: '#666',
+  },
+  pickerCancelBtn: {
+    marginHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  pickerCancelText: {
+    textAlign: 'center',
+    color: '#666',
+    fontSize: 14,
     fontWeight: '600',
   },
 
