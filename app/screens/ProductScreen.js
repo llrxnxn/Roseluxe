@@ -43,7 +43,6 @@ const PRICE_RANGES = [
 const ProductScreen = ({ navigation }) => {
   // STATE
   const [products, setProducts] = useState([]);
-  const [filteredProducts, setFilteredProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -73,26 +72,47 @@ const ProductScreen = ({ navigation }) => {
   // ================================
   // FETCH PRODUCTS
   // ================================
-  const fetchProducts = async () => {
-    try {
-      setLoading(true);
-      const res = await axios.get(API_ENDPOINTS.PRODUCTS);
-      const productData = Array.isArray(res.data)
-        ? res.data
-        : res.data?.products || [];
+ const fetchProducts = async () => {
+  try {
+    setLoading(true);
 
-      setProducts(productData);
-      setFilteredProducts(productData);
+    const priceRange = PRICE_RANGES[selectedPriceRange];
 
-      const cats = ["All", ...new Set(productData.map((p) => getCategoryName(p.category)))];
-      setCategories(cats);
-    } catch (err) {
-      Alert.alert("Error", "Failed to load products");
-    } finally {
-      setLoading(false);
-    }
-  };
+    const params = {
+      search: searchQuery || "",
+      category: selectedCategory !== "All" ? selectedCategory : "",
+      minPrice: priceRange.min,
+      maxPrice: priceRange.max === Infinity ? "" : priceRange.max
+    };
 
+    const res = await axios.get(API_ENDPOINTS.PRODUCTS, { params });
+
+    const productData = res.data?.products || [];
+
+    setProducts(productData);
+
+  } catch (err) {
+    Alert.alert("Error", "Failed to load products");
+  } finally {
+    setLoading(false);
+  }
+};
+
+  // ================================
+  // FETCH CATEGORIES FROM DB
+  // ================================
+  const fetchCategories = async () => {
+  try {
+    const res = await axios.get(API_ENDPOINTS.CATEGORIES);
+    const data = res.data.categories || [];
+
+    const categoryNames = ["All", ...data.map(c => c.name)];
+    setCategories(categoryNames);
+
+  } catch (error) {
+    console.log("Fetch categories error", error);
+  }
+};
   // ================================
   // FETCH CART FROM DB
   // ================================
@@ -146,11 +166,15 @@ const ProductScreen = ({ navigation }) => {
   // LIFECYCLE
   // ================================
   useEffect(() => {
-    fetchProducts();
+    fetchCategories();
     checkLoginStatus();
     fetchCart();
     loadWishlist();
   }, []);
+
+  useEffect(() => {
+  fetchProducts();
+}, [searchQuery, selectedCategory, selectedPriceRange]);
 
   useFocusEffect(
     useCallback(() => {
@@ -158,35 +182,6 @@ const ProductScreen = ({ navigation }) => {
       fetchCart();
     }, [])
   );
-
-  // ================================
-  // SEARCH + FILTER (with category AND price)
-  // ================================
-  useEffect(() => {
-    let filtered = products;
-
-    // Category filter
-    if (selectedCategory !== "All") {
-      filtered = filtered.filter(
-        (p) => getCategoryName(p.category) === selectedCategory
-      );
-    }
-
-    // Price range filter
-    const priceRange = PRICE_RANGES[selectedPriceRange];
-    filtered = filtered.filter(
-      (p) => p.price >= priceRange.min && p.price < priceRange.max
-    );
-
-    // Search filter
-    if (searchQuery.trim()) {
-      filtered = filtered.filter((p) =>
-        p.name.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
-
-    setFilteredProducts(filtered);
-  }, [searchQuery, selectedCategory, selectedPriceRange, products]);
 
   // ================================
   // WISHLIST
@@ -634,7 +629,7 @@ const ProductScreen = ({ navigation }) => {
           <ActivityIndicator size="large" color="#B76E79" />
           <Text style={styles.loadingText}>Loading products...</Text>
         </View>
-      ) : filteredProducts.length === 0 ? (
+      ) : products.length === 0 ? (
         <View style={styles.emptyContainer}>
           <MaterialCommunityIcons
             name="shopping-outline"
@@ -646,7 +641,7 @@ const ProductScreen = ({ navigation }) => {
         </View>
       ) : (
         <FlatList
-          data={filteredProducts}
+          data={products}
           renderItem={renderProduct}
           keyExtractor={(item) => item._id}
           numColumns={2}

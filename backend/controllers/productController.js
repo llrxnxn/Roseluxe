@@ -6,22 +6,48 @@ const cloudinary = require('cloudinary').v2;
 ========================================= */
 exports.getAllProducts = async (req, res) => {
   try {
-    const products = await Product.find({ isActive: true })
-      .populate('category', 'name description image')
+    const { search, category, minPrice, maxPrice } = req.query;
+
+    let filter = { isActive: true };
+
+    // SEARCH
+    if (search) {
+      filter.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { description: { $regex: search, $options: "i" } }
+      ];
+    }
+
+    // CATEGORY
+    if (category && category !== "All") {
+      filter.category = category;
+    }
+
+    // PRICE RANGE
+    if (minPrice || maxPrice) {
+      filter.price = {};
+      if (minPrice) filter.price.$gte = Number(minPrice);
+      if (maxPrice) filter.price.$lte = Number(maxPrice);
+    }
+
+    const products = await Product.find(filter)
+      .populate("category", "name description image")
       .sort({ createdAt: -1 })
       .lean();
 
     res.json({
       success: true,
       products,
-      count: products.length,
+      count: products.length
     });
+
   } catch (error) {
-    console.error('Error fetching products:', error);
+    console.error("Error fetching products:", error);
+
     res.status(500).json({
       success: false,
-      message: 'Error fetching products',
-      error: error.message,
+      message: "Error fetching products",
+      error: error.message
     });
   }
 };
