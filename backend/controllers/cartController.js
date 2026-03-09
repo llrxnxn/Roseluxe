@@ -12,7 +12,6 @@ const addToCart = async (req, res) => {
 
     console.log(`[ADD TO CART] customerId: ${customerId}, productId: ${productId}, quantity: ${quantity}`);
 
-    // Validate customerId
     if (!customerId || customerId === 'undefined') {
       return res.status(400).json({
         success: false,
@@ -43,12 +42,11 @@ const addToCart = async (req, res) => {
       });
     }
 
-    // Convert customerId and productId to ObjectId for consistent comparison
     let customerObjectId, productObjectId;
     try {
       customerObjectId = new mongoose.Types.ObjectId(customerId);
       productObjectId = new mongoose.Types.ObjectId(productId);
-    } catch (error) {
+    } catch {
       return res.status(400).json({
         success: false,
         error: "Invalid ID format"
@@ -91,8 +89,6 @@ const addToCart = async (req, res) => {
 
     await cart.save();
 
-    console.log(`[ADD TO CART SUCCESS] Cart saved. Items: ${cart.items.length}`);
-
     res.status(200).json({
       success: true,
       message: "Item added to cart",
@@ -120,32 +116,16 @@ const getCart = async (req, res) => {
   try {
     const { customerId } = req.params;
 
-    console.log(`[GET CART] customerId: ${customerId}`);
-
-    // Validate customerId
     if (!customerId || customerId === 'undefined') {
-      console.log("[GET CART] Invalid customerId");
       return res.status(400).json({
         success: false,
         error: "Invalid or missing customerId"
       });
     }
 
-    // Convert customerId to ObjectId for consistent comparison
-    let customerObjectId;
-    try {
-      customerObjectId = new mongoose.Types.ObjectId(customerId);
-    } catch (error) {
-      console.log("[GET CART] Invalid ObjectId format:", customerId);
-      return res.status(400).json({
-        success: false,
-        error: "Invalid customerId format"
-      });
-    }
+    const customerObjectId = new mongoose.Types.ObjectId(customerId);
 
     const cart = await Cart.findOne({ customerId: customerObjectId });
-
-    console.log(`[GET CART] Cart found: ${!!cart}, Items: ${cart?.items?.length || 0}`);
 
     if (!cart) {
       return res.json({
@@ -185,10 +165,8 @@ const getCartItem = async (req, res) => {
   try {
     const { customerId, productId } = req.params;
 
-    console.log(`[GET CART ITEM] customerId: ${customerId}, productId: ${productId}`);
-
-    // Convert customerId to ObjectId for consistent comparison
     const customerObjectId = new mongoose.Types.ObjectId(customerId);
+    const productObjectId = new mongoose.Types.ObjectId(productId);
 
     const cart = await Cart.findOne({ customerId: customerObjectId });
 
@@ -198,9 +176,6 @@ const getCartItem = async (req, res) => {
         error: "Cart not found"
       });
     }
-
-    // Convert productId to ObjectId for consistent comparison
-    const productObjectId = new mongoose.Types.ObjectId(productId);
 
     const item = cart.items.find(
       item => item.productId.toString() === productObjectId.toString()
@@ -235,8 +210,6 @@ const updateQuantity = async (req, res) => {
     const { customerId, productId } = req.params;
     const { quantity } = req.body;
 
-    console.log(`[UPDATE QUANTITY] customerId: ${customerId}, productId: ${productId}, quantity: ${quantity}`);
-
     if (!quantity || quantity < 1) {
       return res.status(400).json({
         success: false,
@@ -260,8 +233,8 @@ const updateQuantity = async (req, res) => {
       });
     }
 
-    // Convert customerId to ObjectId for consistent comparison
     const customerObjectId = new mongoose.Types.ObjectId(customerId);
+    const productObjectId = new mongoose.Types.ObjectId(productId);
 
     const cart = await Cart.findOne({ customerId: customerObjectId });
 
@@ -271,9 +244,6 @@ const updateQuantity = async (req, res) => {
         error: "Cart not found"
       });
     }
-
-    // Convert productId to ObjectId for consistent comparison
-    const productObjectId = new mongoose.Types.ObjectId(productId);
 
     const item = cart.items.find(
       item => item.productId.toString() === productObjectId.toString()
@@ -289,8 +259,6 @@ const updateQuantity = async (req, res) => {
     item.quantity = quantity;
 
     await cart.save();
-
-    console.log(`[UPDATE QUANTITY SUCCESS] New quantity: ${quantity}`);
 
     res.json({
       success: true,
@@ -319,10 +287,8 @@ const removeItem = async (req, res) => {
   try {
     const { customerId, productId } = req.params;
 
-    console.log(`[REMOVE ITEM] customerId: ${customerId}, productId: ${productId}`);
-
-    // Convert customerId to ObjectId for consistent comparison
     const customerObjectId = new mongoose.Types.ObjectId(customerId);
+    const productObjectId = new mongoose.Types.ObjectId(productId);
 
     const cart = await Cart.findOne({ customerId: customerObjectId });
 
@@ -333,15 +299,12 @@ const removeItem = async (req, res) => {
       });
     }
 
-    // Convert productId to ObjectId for consistent comparison
-    const productObjectId = new mongoose.Types.ObjectId(productId);
-
     const initialLength = cart.items.length;
+
     cart.items = cart.items.filter(
       item => item.productId.toString() !== productObjectId.toString()
     );
 
-    // Check if item was actually removed
     if (cart.items.length === initialLength) {
       return res.status(404).json({
         success: false,
@@ -349,9 +312,23 @@ const removeItem = async (req, res) => {
       });
     }
 
-    await cart.save();
+    // 🔴 If no items left → delete cart
+    if (cart.items.length === 0) {
+      await Cart.deleteOne({ customerId: customerObjectId });
 
-    console.log(`[REMOVE ITEM SUCCESS] Items remaining: ${cart.items.length}`);
+      return res.json({
+        success: true,
+        message: "Item removed and cart deleted",
+        data: [],
+        summary: {
+          subtotal: 0,
+          tax: 0,
+          total: 0
+        }
+      });
+    }
+
+    await cart.save();
 
     res.json({
       success: true,
@@ -380,9 +357,6 @@ const clearCart = async (req, res) => {
   try {
     const { customerId } = req.params;
 
-    console.log(`[CLEAR CART] customerId: ${customerId}`);
-
-    // Convert customerId to ObjectId for consistent comparison
     const customerObjectId = new mongoose.Types.ObjectId(customerId);
 
     const cart = await Cart.findOne({ customerId: customerObjectId });
@@ -394,15 +368,12 @@ const clearCart = async (req, res) => {
       });
     }
 
-    cart.items = [];
-
-    await cart.save();
-
-    console.log("[CLEAR CART SUCCESS]");
+    // 🔴 Delete entire cart
+    await Cart.deleteOne({ customerId: customerObjectId });
 
     res.json({
       success: true,
-      message: "Cart cleared",
+      message: "Cart deleted",
       data: [],
       summary: {
         subtotal: 0,
