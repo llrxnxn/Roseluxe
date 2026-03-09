@@ -11,8 +11,6 @@ import {
   Modal,
   SafeAreaView,
   ScrollView,
-  TextInput,
-  Animated,
 } from "react-native";
 import { Text } from "react-native-paper";
 import axios from "axios";
@@ -20,7 +18,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useFocusEffect } from "@react-navigation/native";
 import { API_ENDPOINTS } from "../config/api";
-import HeaderScreen from "./HeaderScreen";
+import HeaderScreen from "./components/HeaderScreen";
+import Navigation from "./components/navigation";
 
 const { width } = Dimensions.get("window");
 const PRODUCT_CARD_WIDTH = (width - 40) / 2;
@@ -64,7 +63,6 @@ const ProductScreen = ({ navigation }) => {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [showProductModal, setShowProductModal] = useState(false);
   const [quantity, setQuantity] = useState(1);
-  const [activeTab, setActiveTab] = useState("products");
   
   // Profile image
   const [userImage, setUserImage] = useState(null);
@@ -72,47 +70,48 @@ const ProductScreen = ({ navigation }) => {
   // ================================
   // FETCH PRODUCTS
   // ================================
- const fetchProducts = async () => {
-  try {
-    setLoading(true);
+  const fetchProducts = async () => {
+    try {
+      setLoading(true);
 
-    const priceRange = PRICE_RANGES[selectedPriceRange];
+      const priceRange = PRICE_RANGES[selectedPriceRange];
 
-    const params = {
-      search: searchQuery || "",
-      category: selectedCategory !== "All" ? selectedCategory : "",
-      minPrice: priceRange.min,
-      maxPrice: priceRange.max === Infinity ? "" : priceRange.max
-    };
+      const params = {
+        search: searchQuery || "",
+        category: selectedCategory !== "All" ? selectedCategory : "",
+        minPrice: priceRange.min,
+        maxPrice: priceRange.max === Infinity ? "" : priceRange.max
+      };
 
-    const res = await axios.get(API_ENDPOINTS.PRODUCTS, { params });
+      const res = await axios.get(API_ENDPOINTS.PRODUCTS, { params });
 
-    const productData = res.data?.products || [];
+      const productData = res.data?.products || [];
 
-    setProducts(productData);
+      setProducts(productData);
 
-  } catch (err) {
-    Alert.alert("Error", "Failed to load products");
-  } finally {
-    setLoading(false);
-  }
-};
+    } catch (err) {
+      Alert.alert("Error", "Failed to load products");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // ================================
   // FETCH CATEGORIES FROM DB
   // ================================
   const fetchCategories = async () => {
-  try {
-    const res = await axios.get(API_ENDPOINTS.CATEGORIES);
-    const data = res.data.categories || [];
+    try {
+      const res = await axios.get(API_ENDPOINTS.CATEGORIES);
+      const data = res.data.categories || [];
 
-    const categoryNames = ["All", ...data.map(c => c.name)];
-    setCategories(categoryNames);
+      const categoryNames = ["All", ...data.map(c => c.name)];
+      setCategories(categoryNames);
 
-  } catch (error) {
-    console.log("Fetch categories error", error);
-  }
-};
+    } catch (error) {
+      console.log("Fetch categories error", error);
+    }
+  };
+
   // ================================
   // FETCH CART FROM DB
   // ================================
@@ -120,14 +119,17 @@ const ProductScreen = ({ navigation }) => {
     try {
       const token = await AsyncStorage.getItem("token");
       const userData = await AsyncStorage.getItem("user");
-      if (!token || !userData) return;
+      if (!token || !userData) {
+        setCartCount(0);
+        return;
+      }
 
       const user = JSON.parse(userData);
-      const res = await axios.get(`${API_ENDPOINTS.CART}/${user.id}`, {
+      const res = await axios.get(`${API_ENDPOINTS.CART}/${user.id || user._id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      const cartItems = res.data.items || [];
+      const cartItems = res.data.items || res.data.data?.items || [];
       setCart(cartItems);
       setCartCount(cartItems.reduce((t, i) => t + i.quantity, 0));
     } catch (error) {
@@ -173,8 +175,8 @@ const ProductScreen = ({ navigation }) => {
   }, []);
 
   useEffect(() => {
-  fetchProducts();
-}, [searchQuery, selectedCategory, selectedPriceRange]);
+    fetchProducts();
+  }, [searchQuery, selectedCategory, selectedPriceRange]);
 
   useFocusEffect(
     useCallback(() => {
@@ -213,7 +215,7 @@ const ProductScreen = ({ navigation }) => {
 
       const user = JSON.parse(userData);
       await axios.post(
-        `${API_ENDPOINTS.CART}/${user.id}`,
+        `${API_ENDPOINTS.CART}/${user.id || user._id}`,
         { productId: selectedProduct._id, quantity },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -332,47 +334,6 @@ const ProductScreen = ({ navigation }) => {
   };
 
   // ================================
-  // NAVIGATION ITEM (HomeScreen style)
-  // ================================
-  const NavItem = ({ name, icon, onPress }) => (
-    <TouchableOpacity
-      style={styles.navItem}
-      onPress={onPress}
-      activeOpacity={0.7}
-    >
-      <View
-        style={[
-          styles.navIconContainer,
-          activeTab === name && styles.navIconActive,
-        ]}
-      >
-        {name === "profile" ? (
-          <Image
-            source={{
-              uri: userImage || "https://i.pinimg.com/736x/4f/a9/1d/4fa91db9a2e3f4077cb29e85ab3e270c.jpg",
-            }}
-            style={styles.profileImage}
-            onError={() => console.warn("Profile image failed to load")}
-          />
-        ) : (
-          <View style={styles.iconWithBadge}>
-            <MaterialCommunityIcons
-              name={icon}
-              size={24}
-              color={activeTab === name ? "#B76E79" : "#666"}
-            />
-            {name === "cart" && cartCount > 0 && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{cartCount}</Text>
-              </View>
-            )}
-          </View>
-        )}
-      </View>
-    </TouchableOpacity>
-  );
-
-  // ================================
   // PRODUCT MODAL
   // ================================
   const renderProductModal = () => {
@@ -419,7 +380,7 @@ const ProductScreen = ({ navigation }) => {
               renderItem={({ item }) => (
                 <Image
                   source={{ uri: item }}
-                  style={[styles.modalImage, { width: width }]} // full width
+                  style={[styles.modalImage, { width: width }]}
                 />
               )}
             />
@@ -656,58 +617,14 @@ const ProductScreen = ({ navigation }) => {
       {/* PRODUCT MODAL */}
       {renderProductModal()}
 
-      {/* BOTTOM NAV */}
-      <View style={styles.bottomNav}>
-        <NavItem
-          name="home"
-          icon="home"
-          onPress={() => {
-            setActiveTab("home");
-            navigation.navigate("Home");
-          }}
-        />
-        <NavItem
-          name="products"
-          icon="flower"
-          onPress={() => {
-            setActiveTab("products");
-            navigation.navigate("Products");
-          }}
-        />
-        <NavItem
-          name="cart"
-          icon="cart"
-          onPress={() => {
-            setActiveTab("cart");
-            if (isLoggedIn) {
-              navigation.navigate("Cart");
-            } else {
-              Alert.alert("Login Required", "Please login first");
-              navigation.navigate("Login");
-            }
-          }}
-        />
-        <NavItem
-          name="wishlist"
-          icon="heart"
-          onPress={() => {
-            setActiveTab("wishlist");
-            navigation.navigate("Wishlist");
-          }}
-        />
-        <NavItem
-          name="profile"
-          icon="account-circle"
-          onPress={() => {
-            setActiveTab("profile");
-            if (isLoggedIn) {
-              navigation.navigate("Profile");
-            } else {
-              navigation.navigate("Login");
-            }
-          }}
-        />
-      </View>
+      {/* NAVIGATION COMPONENT WITH RIGHT DRAWER */}
+      <Navigation
+        navigation={navigation}
+        currentScreen="Products"
+        isLoggedIn={isLoggedIn}
+        userImage={userImage}
+        cartCount={cartCount}
+      />
     </View>
   );
 };
@@ -1070,75 +987,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     marginLeft: 8,
-  },
-
-  /* BOTTOM NAV - HomeScreen Style */
-  bottomNav: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 70,
-    backgroundColor: "white",
-    borderTopWidth: 1,
-    borderTopColor: "#f0f0f0",
-    flexDirection: "row",
-    justifyContent: "space-around",
-    alignItems: "center",
-    elevation: 8,
-    paddingBottom: 8,
-  },
-
-  navItem: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    height: "100%",
-  },
-
-  navIconContainer: {
-    justifyContent: "center",
-    alignItems: "center",
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-  },
-
-  navIconActive: {
-    backgroundColor: "#FFE8ED",
-  },
-
-  iconWithBadge: {
-    position: "relative",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
-  profileImage: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 2,
-    borderColor: "#B76E79",
-  },
-
-  badge: {
-    position: "absolute",
-    top: -6,
-    right: -6,
-    backgroundColor: "#FF6B6B",
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 2,
-    borderColor: "#fff",
-  },
-
-  badgeText: {
-    color: "#fff",
-    fontSize: 9,
-    fontWeight: "700",
   },
 });

@@ -8,15 +8,13 @@ import {
   Dimensions,
   Animated,
   ImageBackground,
-  TouchableOpacity,
-  Alert,
 } from 'react-native';
 import { Button, Text } from 'react-native-paper';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useFocusEffect } from '@react-navigation/native';
 import { API_ENDPOINTS } from '../config/api';
+import Navigation from './components/navigation';
 
 const { width } = Dimensions.get('window');
 const CATEGORY_CARD_WIDTH = width - 40;
@@ -30,19 +28,21 @@ const HomeScreen = ({ navigation }) => {
   const flatListRef = useRef();
   const scrollX = useRef(new Animated.Value(0)).current;
   const currentIndex = useRef(0);
-  const [activeTab, setActiveTab] = useState('home');
   const autoScrollInterval = useRef(null);
+  const [cartCount, setCartCount] = useState(0);
 
   useEffect(() => {
     fetchCategories();
     checkLoginStatus();
+    fetchCartCount();
   }, []);
 
   useFocusEffect(
-  React.useCallback(() => {
-    checkLoginStatus();
-  }, [])
-);
+    React.useCallback(() => {
+      checkLoginStatus();
+      fetchCartCount();
+    }, [])
+  );
 
   //Auto-Scroll
   useEffect(() => {
@@ -70,18 +70,16 @@ const HomeScreen = ({ navigation }) => {
       currentIndex.current = newIndex;
       setActiveIndex(newIndex);
 
-      // console.log(`Auto-scrolling to index: ${currentIndex.current}`);
-
       if (flatListRef.current) {
         try {
-        flatListRef.current?.scrollToIndex({
-          index: currentIndex.current,
-          animated: true,
-          viewPosition: 0.5,
-        });
-      } catch (err) {
-        console.warn("Scroll error:", err);
-      }
+          flatListRef.current?.scrollToIndex({
+            index: currentIndex.current,
+            animated: true,
+            viewPosition: 0.5,
+          });
+        } catch (err) {
+          console.warn("Scroll error:", err);
+        }
       }
     }, 4000);
   };
@@ -103,17 +101,10 @@ const HomeScreen = ({ navigation }) => {
         setCategories(response.data);
       } else {
         console.warn('Invalid categories response format:', response.data);
-        console.warn('Expected: { categories: [...], count, success } or [...]');
         setCategories([]);
       }
     } catch (error) {
       console.error('Error fetching categories:', error);
-      console.error('Error message:', error.message);
-      console.error('Error URL:', error.config?.url);
-      console.error('Response status:', error.response?.status);
-      console.error('Response data:', error.response?.data);
-      
-      Alert.alert('Error', 'Failed to load categories. Please try again.');
       setCategories([]);
     } finally {
       setLoadingCategories(false);
@@ -140,6 +131,29 @@ const HomeScreen = ({ navigation }) => {
     }
   };
 
+  const fetchCartCount = async () => {
+    try {
+      const token = await AsyncStorage.getItem("token");
+      const userData = await AsyncStorage.getItem("user");
+      if (!token || !userData) {
+        setCartCount(0);
+        return;
+      }
+
+      const user = JSON.parse(userData);
+      const res = await axios.get(`${API_ENDPOINTS.CART}/${user.id || user._id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const cartItems = res.data.items || res.data.data?.items || [];
+      const count = cartItems.reduce((t, i) => t + i.quantity, 0);
+      setCartCount(count);
+    } catch (error) {
+      console.log("Fetch cart count error:", error);
+      setCartCount(0);
+    }
+  };
+
   const handleOrderNow = () => {
     console.log('ORDER NOW clicked - isLoggedIn:', isLoggedIn);
     
@@ -149,37 +163,6 @@ const HomeScreen = ({ navigation }) => {
     } else {
       console.log('User not logged in - navigating to Login');
       navigation.navigate('Login');
-    }
-  };
-
-  const handleNavigation = (tabName) => {
-    setActiveTab(tabName);
-    switch (tabName) {
-      case 'home':
-        break;
-      case 'products':
-        navigation.navigate('Products');
-        break;
-      case 'cart':
-      if (isLoggedIn) {
-        navigation.navigate('Cart');
-      } else {
-        Alert.alert("Login Required","Please login first");
-        navigation.navigate('Login');
-      }
-      break;
-      case 'wishlist':
-        navigation.navigate('Wishlist');
-        break;
-      case 'profile':
-        if (isLoggedIn) {
-          navigation.navigate('Profile');
-        } else {
-          navigation.navigate('Login');
-        }
-        break;
-      default:
-        break;
     }
   };
 
@@ -201,37 +184,6 @@ const HomeScreen = ({ navigation }) => {
         <Text style={styles.categoryName}>{item.name}</Text>
       </View>
     </View>
-  );
-
-  const NavItem = ({ name, icon, onPress }) => (
-    <TouchableOpacity
-      style={styles.navItem}
-      onPress={onPress}
-      activeOpacity={0.7}
-    >
-      <View
-        style={[
-          styles.navIconContainer,
-          activeTab === name && styles.navIconActive,
-        ]}
-      >
-        {name === 'profile' ? (
-          <Image
-            source={{
-              uri: userImage ? userImage :  'https://i.pinimg.com/736x/4f/a9/1d/4fa91db9a2e3f4077cb29e85ab3e270c.jpg',
-            }}
-            style={styles.profileImage}
-            onError={() => console.warn('Profile image failed to load')}
-          />
-        ) : (
-          <MaterialCommunityIcons
-            name={icon}
-            size={24}
-            color={activeTab === name ? '#B76E79' : '#666'}
-          />
-        )}
-      </View>
-    </TouchableOpacity>
   );
 
   return (
@@ -339,33 +291,14 @@ const HomeScreen = ({ navigation }) => {
         </View>
       </ScrollView>
 
-      <View style={styles.bottomNav}>
-        <NavItem
-          name="home"
-          icon="home"
-          onPress={() => handleNavigation('home')}
-        />
-        <NavItem
-          name="products"
-          icon="flower"
-          onPress={() => handleNavigation('products')}
-        />
-        <NavItem
-          name="cart"
-          icon="cart"
-          onPress={() => handleNavigation('cart')}
-        />
-        <NavItem
-          name="wishlist"
-          icon="heart"
-          onPress={() => handleNavigation('wishlist')}
-        />
-        <NavItem
-          name="profile"
-          icon="account-circle"
-          onPress={() => handleNavigation('profile')}
-        />
-      </View>
+      {/* NAVIGATION COMPONENT WITH DRAWER */}
+      <Navigation
+        navigation={navigation}
+        currentScreen="Home"
+        isLoggedIn={isLoggedIn}
+        userImage={userImage}
+        cartCount={cartCount}
+      />
     </View>
   );
 };
@@ -497,7 +430,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 
-  // NEW: Dots indicator for carousel
   dotsContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -518,50 +450,6 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-  },
-
-  // BOTTOM NAVIGATION STYLES
-  bottomNav: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 70,
-    backgroundColor: 'white',
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    elevation: 8,
-    paddingBottom: 8,
-  },
-
-  navItem: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    height: '100%',
-  },
-
-  navIconContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-  },
-
-  navIconActive: {
-    backgroundColor: '#FFE8ED',
-  },
-
-  profileImage: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 2,
-    borderColor: '#B76E79',
   },
 });
 

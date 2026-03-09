@@ -11,7 +11,7 @@ import { Text, Divider } from 'react-native-paper';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const ProfileScreen = ({ navigation }) => {
+const ProfileScreen = ({ navigation, route }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -63,38 +63,6 @@ const ProfileScreen = ({ navigation }) => {
     }
   };
 
-  const handleLogout = () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        {
-          text: 'Cancel',
-          onPress: () => null,
-          style: 'cancel',
-        },
-        {
-          text: 'Logout',
-          onPress: async () => {
-            try {
-              await AsyncStorage.removeItem('user');
-              await AsyncStorage.removeItem('authToken');
-              await AsyncStorage.removeItem('token');
-              navigation.reset({
-                index: 0,
-                routes: [{ name: 'Home' }],
-              });
-            } catch (error) {
-              console.log('Error logging out:', error);
-            }
-          },
-          style: 'destructive',
-        },
-      ],
-      { cancelable: false }
-    );
-  };
-
   const MenuOption = ({ icon, label, onPress, isDanger = false }) => (
     <TouchableOpacity
       style={styles.menuOption}
@@ -133,143 +101,145 @@ const ProfileScreen = ({ navigation }) => {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      {/* USER HEADER */}
-      <View style={styles.logoSection}>
-                    <Text style={styles.logoText}>ROSELUXE</Text>
-                  </View>
-      <View style={styles.userHeader}>
-        {/* Profile Image */}
-        <Image
-          source={{
-            uri: user?.picture || 'https://i.pinimg.com/736x/4f/a9/1d/4fa91db9a2e3f4077cb29e85ab3e270c.jpg',
-          }}
-          style={styles.profileImage}
-          onError={() => console.log('Failed to load profile image')}
-        />
-
-        {/* Name */}
-        <Text style={styles.userName}>
-          {user?.fullName || 'User'}
-        </Text>
-
-        {/* Email */}
-        <Text style={styles.userEmail}>{user?.email || 'No email'}</Text>
-
-        {/* Phone and Address - Inline with separator */}
-        {(user?.phone || user?.address) && (
-          <View style={styles.userContactContainer}>
-            {user?.phone && (
-              <>
-                <MaterialCommunityIcons name="phone" size={14} color="#B76E79" />
-                <Text style={styles.userContactText}>{user.phone}</Text>
-              </>
-            )}
-            
-            {user?.phone && user?.address && (
-              <Text style={styles.separator}>|</Text>
-            )}
-            
-            {user?.address && (
-              <>
-                <MaterialCommunityIcons name="map-marker" size={14} color="#B76E79" />
-                <Text style={styles.userContactText}>{user.address}</Text>
-              </>
-            )}
-          </View>
-        )}
-
-        {/* BUTTONS ROW - Edit Profile and Refresh Icon */}
-        <View style={styles.buttonRow}>
-          <TouchableOpacity
-            style={styles.editButton}
-            onPress={() => navigation.navigate('EditProfile')}
-            activeOpacity={0.8}
-          >
-            <MaterialCommunityIcons name="pencil" size={16} color="white" />
-            <Text style={styles.editButtonText}>Edit Profile</Text>
+    <View style={styles.mainContainer}>                      
+      {/* ROSELUXE LOGO AND MY PROFILE HEADER */}
+      <View style={styles.topContainer}>
+        <View style={styles.logoSection}>
+          <Text style={styles.logoText}>ROSELUXE</Text>
+        </View>  
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <MaterialCommunityIcons name="arrow-left" size={28} color="#B76E79" />
           </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.refreshIconButton, refreshing && styles.refreshIconButtonDisabled]}
-            onPress={handleRefresh}
-            disabled={refreshing}
-            activeOpacity={0.8}
-            title="Refresh"
-          >
-            <MaterialCommunityIcons 
-              name="refresh" 
-              size={20} 
-              color="white"
-            />
-          </TouchableOpacity>
+          <Text style={styles.headerTitle}>My Profile</Text>
+          <View style={{ width: 28 }} />
         </View>
       </View>
 
-      {/* DIVIDER */}
-      <Divider style={styles.divider} />
+      <ScrollView contentContainerStyle={styles.container}>
+        {/* USER HEADER */}
+        <View style={styles.userHeader}>
+          {/* Profile Image */}
+          <Image
+            source={{
+              uri: user?.picture || 'https://i.pinimg.com/736x/4f/a9/1d/4fa91db9a2e3f4077cb29e85ab3e270c.jpg',
+            }}
+            style={styles.profileImage}
+            onError={() => console.log('Failed to load profile image')}
+          />
 
-      {/* MENU SECTION */}
-      <View style={styles.menuSection}>
-        <Text style={styles.menuSectionTitle}>Account</Text>
+          {/* Name */}
+          <Text style={styles.userName}>
+            {user?.fullName || 'User'}
+          </Text>
 
-        <MenuOption
-          icon="information"
-          label="About Us"
-          onPress={() => navigation.navigate('AboutUs')}
-        />
+          {/* Email */}
+          <Text style={styles.userEmail}>{user?.email || 'No email'}</Text>
 
-        <MenuOption
-          icon="history"
-          label="Transaction History"
-          onPress={() => navigation.navigate('TransactionHistory')}
-        />
-      </View>
+          {/* Phone and Address - Inline with separator */}
+          {(user?.phone || user?.address) && (
+            <View style={styles.userContactContainer}>
+              {user?.phone && (
+                <>
+                  <MaterialCommunityIcons name="phone" size={14} color="#B76E79" />
+                  <Text style={styles.userContactText}>{user.phone}</Text>
+                </>
+              )}
+              
+              {user?.phone && user?.address && (
+                <Text style={styles.separator}>|</Text>
+              )}
+              
+              {user?.address && (
+                <>
+                  <MaterialCommunityIcons name="map-marker" size={14} color="#B76E79" />
+                  <Text style={styles.userContactText}>{user.address}</Text>
+                </>
+              )}
+            </View>
+          )}
 
-      {/* DIVIDER */}
-      <Divider style={styles.divider} />
+          {/* BUTTONS ROW - Edit Profile and Refresh Icon */}
+          <View style={styles.buttonRow}>
+            <TouchableOpacity
+              style={styles.editButton}
+              onPress={() => navigation.navigate('EditProfile')}
+              activeOpacity={0.8}
+            >
+              <MaterialCommunityIcons name="pencil" size={16} color="white" />
+              <Text style={styles.editButtonText}>Edit Profile</Text>
+            </TouchableOpacity>
 
-      {/* LOGOUT BUTTON */}
-      <View style={styles.menuSection}>
-        <MenuOption
-          icon="logout"
-          label="Logout"
-          onPress={handleLogout}
-          isDanger={true}
-        />
-      </View>
-
-      {/* EXTRA SPACING */}
-      <View style={styles.bottomSpacing} />
-    </ScrollView>
+            <TouchableOpacity
+              style={[styles.refreshIconButton, refreshing && styles.refreshIconButtonDisabled]}
+              onPress={handleRefresh}
+              disabled={refreshing}
+              activeOpacity={0.8}
+              title="Refresh"
+            >
+              <MaterialCommunityIcons 
+                name="refresh" 
+                size={20} 
+                color="white"
+              />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </ScrollView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flexGrow: 1,
+  mainContainer: {
+    flex: 1,
     backgroundColor: '#FFF5F7',
-    paddingBottom: 80,
   },
 
-    logoSection: {
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#FFE8ED',
+  topContainer: {
     marginTop: 40,
   },
 
+  logoSection: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    backgroundColor: 'white',
+  },
+
   logoText: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: '800',
     color: '#B76E79',
     letterSpacing: 3,
     fontStyle: 'italic',
   },
   
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderBottomColor: '#FFE8ED',
+  },
+
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#333',
+    flex: 1,
+    textAlign: 'center',
+  },
+
+  container: {
+    flexGrow: 1,
+    backgroundColor: '#FFF5F7',
+    paddingBottom: 20,
+  },
+
   loadingText: {
     fontSize: 16,
     color: '#B76E79',
@@ -284,7 +254,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
-    marginBottom: 10,
+    marginHorizontal: 10,
+    marginVertical: 16,
     elevation: 3,
   },
 

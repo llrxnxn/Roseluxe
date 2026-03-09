@@ -17,7 +17,7 @@ import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import axios from "axios";
 import { API_ENDPOINTS } from "../config/api";
 import { useFocusEffect } from "@react-navigation/native";
-
+import Navigation from "./components/navigation";
 
 const { width } = Dimensions.get("window");
 
@@ -25,16 +25,35 @@ const CartScreen = ({ navigation }) => {
   const [cart, setCart] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [user, setUser] = useState(null);
-  const [activeTab, setActiveTab] = useState("cart");
   const [selectedItems, setSelectedItems] = useState(new Set());
   const [selectAll, setSelectAll] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userImage, setUserImage] = useState(null);
+  const [cartCount, setCartCount] = useState(0);
 
   // Use useFocusEffect to reload cart when screen is focused
   useFocusEffect(
     useCallback(() => {
       loadUserAndCart();
+      checkLoginStatus();
     }, [])
   );
+
+  const checkLoginStatus = async () => {
+    try {
+      const user = await AsyncStorage.getItem("user");
+      setIsLoggedIn(!!user);
+      if (user) {
+        const parsedUser = JSON.parse(user);
+        if (parsedUser.picture) {
+          setUserImage(parsedUser.picture);
+        }
+      }
+    } catch (error) {
+      console.log("Error checking login status:", error);
+      setIsLoggedIn(false);
+    }
+  };
 
   const loadUserAndCart = async () => {
     try {
@@ -48,6 +67,7 @@ const CartScreen = ({ navigation }) => {
         setCart([]);
         setSelectedItems(new Set());
         setSelectAll(false);
+        setCartCount(0);
         setIsLoading(false);
         return;
       }
@@ -63,6 +83,7 @@ const CartScreen = ({ navigation }) => {
         setCart([]);
         setSelectedItems(new Set());
         setSelectAll(false);
+        setCartCount(0);
         setIsLoading(false);
         return;
       }
@@ -94,6 +115,7 @@ const CartScreen = ({ navigation }) => {
         
         console.log("Cart items:", cartData);
         setCart(cartData);
+        setCartCount(cartData.reduce((t, i) => t + i.quantity, 0));
         setSelectedItems(new Set());
         setSelectAll(false);
       } else {
@@ -101,6 +123,7 @@ const CartScreen = ({ navigation }) => {
         setCart([]);
         setSelectedItems(new Set());
         setSelectAll(false);
+        setCartCount(0);
       }
     } catch (error) {
       console.log("Error fetching cart:");
@@ -118,6 +141,7 @@ const CartScreen = ({ navigation }) => {
       setCart([]);
       setSelectedItems(new Set());
       setSelectAll(false);
+      setCartCount(0);
     } finally {
       setIsLoading(false);
     }
@@ -175,6 +199,7 @@ const CartScreen = ({ navigation }) => {
           ? response.data.data 
           : response.data.data.items || [];
         setCart(updatedCart);
+        setCartCount(updatedCart.reduce((t, i) => t + i.quantity, 0));
       } else {
         Alert.alert("Error", response.data.error || "Cannot update quantity");
       }
@@ -205,6 +230,7 @@ const CartScreen = ({ navigation }) => {
           ? response.data.data 
           : response.data.data.items || [];
         setCart(updatedCart);
+        setCartCount(updatedCart.reduce((t, i) => t + i.quantity, 0));
         
         // Remove from selected items
         const newSelected = new Set(selectedItems);
@@ -368,8 +394,9 @@ const CartScreen = ({ navigation }) => {
   return (
     <View style={styles.mainContainer}>
       <View style={styles.logoSection}>
-              <Text style={styles.logoText}>ROSELUXE</Text>
-            </View>
+        <Text style={styles.logoText}>ROSELUXE</Text>
+      </View>
+
       {/* TOP HEADER WITH DELETE AND SELECTION COUNT */}
       {cart.length > 0 && (
         <View style={styles.topHeader}>
@@ -491,74 +518,15 @@ const CartScreen = ({ navigation }) => {
         )}
       </SafeAreaView>
 
-      {/* BOTTOM NAV */}
-      <View style={styles.bottomNav}>
-        <NavItem
-          name="home"
-          icon="home"
-          onPress={() => {
-            setActiveTab("home");
-            navigation.navigate("Home");
-          }}
-        />
-        <NavItem
-          name="products"
-          icon="flower"
-          onPress={() => {
-            setActiveTab("products");
-            navigation.navigate("Products");
-          }}
-        />
-        <NavItem
-          name="cart"
-          icon="cart"
-          onPress={() => {
-            setActiveTab("cart");
-          }}
-        />
-        <NavItem
-          name="wishlist"
-          icon="heart"
-          onPress={() => {
-            setActiveTab("wishlist");
-            navigation.navigate("Wishlist");
-          }}
-        />
-        <NavItem
-          name="profile"
-          icon="account-circle"
-          onPress={() => {
-            setActiveTab("profile");
-            navigation.navigate("Profile");
-          }}
-        />
-      </View>
+      {/* NAVIGATION COMPONENT WITH RIGHT DRAWER */}
+      <Navigation
+        navigation={navigation}
+        currentScreen="Cart"
+        isLoggedIn={isLoggedIn}
+        userImage={userImage}
+        cartCount={cartCount}
+      />
     </View>
-  );
-};
-
-// Navigation Item Component
-const NavItem = ({ name, icon, onPress }) => {
-  const [activeTab, setActiveTab] = React.useState("cart");
-  return (
-    <TouchableOpacity
-      style={styles.navItem}
-      onPress={onPress}
-      activeOpacity={0.7}
-    >
-      <View
-        style={[
-          styles.navIconContainer,
-          activeTab === name && styles.navIconActive,
-        ]}
-      >
-        <MaterialCommunityIcons
-          name={icon}
-          size={24}
-          color={activeTab === name ? "#B76E79" : "#666"}
-        />
-      </View>
-    </TouchableOpacity>
   );
 };
 
@@ -567,7 +535,7 @@ const styles = StyleSheet.create({
   container: { flexGrow: 1, paddingBottom: 20 },
   
   // Logo Section - ROSELUXE
-    logoSection: {
+  logoSection: {
     paddingVertical: 16,
     paddingHorizontal: 16,
     alignItems: 'center',
@@ -845,42 +813,6 @@ const styles = StyleSheet.create({
     marginTop: 12,
     color: "#999",
     fontSize: 14,
-  },
-
-  /* BOTTOM NAV */
-  bottomNav: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 70,
-    backgroundColor: "white",
-    borderTopWidth: 1,
-    borderTopColor: "#f0f0f0",
-    flexDirection: "row",
-    justifyContent: "space-around",
-    alignItems: "center",
-    elevation: 8,
-    paddingBottom: 8,
-  },
-
-  navItem: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    height: "100%",
-  },
-
-  navIconContainer: {
-    justifyContent: "center",
-    alignItems: "center",
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-  },
-
-  navIconActive: {
-    backgroundColor: "#FFE8ED",
   },
 });
 

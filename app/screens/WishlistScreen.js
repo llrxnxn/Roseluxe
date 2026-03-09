@@ -13,7 +13,9 @@ import {
 import { Button, Text } from 'react-native-paper';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import HeaderScreen from './HeaderScreen';
+import { useFocusEffect } from '@react-navigation/native';
+import HeaderScreen from './components/HeaderScreen';
+import Navigation from './components/navigation';
 
 const { width } = Dimensions.get('window');
 const PRODUCT_CARD_WIDTH = (width - 40) / 2;
@@ -23,13 +25,17 @@ const WishlistScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredWishlist, setFilteredWishlist] = useState([]);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userImage, setUserImage] = useState(null);
+  const [cartCount, setCartCount] = useState(0);
 
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
+  useFocusEffect(
+    React.useCallback(() => {
       loadWishlist();
-    });
-    return unsubscribe;
-  }, [navigation]);
+      checkLoginStatus();
+      fetchCartCount();
+    }, [])
+  );
 
   // Load wishlist from AsyncStorage
   const loadWishlist = async () => {
@@ -48,12 +54,41 @@ const WishlistScreen = ({ navigation }) => {
     }
   };
 
+  const checkLoginStatus = async () => {
+    try {
+      const user = await AsyncStorage.getItem('user');
+      setIsLoggedIn(!!user);
+      if (user) {
+        const parsedUser = JSON.parse(user);
+        if (parsedUser.picture) {
+          setUserImage(parsedUser.picture);
+        }
+      }
+    } catch (error) {
+      console.log('Error checking login status:', error);
+      setIsLoggedIn(false);
+    }
+  };
+
+  const fetchCartCount = async () => {
+    try {
+      const savedWishlist = await AsyncStorage.getItem('wishlist');
+      if (savedWishlist) {
+        const parsed = JSON.parse(savedWishlist);
+        setCartCount(parsed.length);
+      }
+    } catch (error) {
+      console.log('Error fetching cart count:', error);
+      setCartCount(0);
+    }
+  };
+
   // Handle search/filter
   const handleSearch = () => {
     if (searchQuery.trim()) {
       const filtered = wishlist.filter((item) =>
         item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.category.toLowerCase().includes(searchQuery.toLowerCase())
+        (typeof item.category === 'string' ? item.category.toLowerCase().includes(searchQuery.toLowerCase()) : false)
       );
       setFilteredWishlist(filtered);
     } else {
@@ -72,36 +107,48 @@ const WishlistScreen = ({ navigation }) => {
     setWishlist(updatedWishlist);
     setFilteredWishlist(updatedWishlist);
     await AsyncStorage.setItem('wishlist', JSON.stringify(updatedWishlist));
+    setCartCount(updatedWishlist.length);
     Alert.alert('Removed', 'Item removed from wishlist');
   };
 
   // Add to cart from wishlist
   const addToCart = async (product) => {
     try {
-      const savedCart = await AsyncStorage.getItem('cart');
-      const currentCart = savedCart ? JSON.parse(savedCart) : [];
+      const token = await AsyncStorage.getItem('token');
+      const userData = await AsyncStorage.getItem('user');
 
-      const existingItem = currentCart.find((item) => item._id === product._id);
-
-      let updatedCart;
-      if (existingItem) {
-        updatedCart = currentCart.map((item) =>
-          item._id === product._id
-            ? { ...item, quantity: item.quantity + 1 }
-            : item
-        );
-      } else {
-        updatedCart = [...currentCart, { ...product, quantity: 1 }];
+      if (!token || !userData) {
+        Alert.alert('Login Required', 'Please login to add items to cart');
+        navigation.navigate('Login');
+        return;
       }
 
-      await AsyncStorage.setItem('cart', JSON.stringify(updatedCart));
-      Alert.alert('Added', `${product.name} added to cart`, [
-        { text: 'Continue' },
-        {
-          text: 'View Cart',
-          onPress: () => navigation.navigate('Cart'),
+      const user = JSON.parse(userData);
+      
+      // Call API to add to cart
+      const response = await fetch(`${API_ENDPOINTS.CART}/${user.id || user._id}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
         },
-      ]);
+        body: JSON.stringify({
+          productId: product._id,
+          quantity: 1,
+        }),
+      });
+
+      if (response.ok) {
+        Alert.alert('Added', `${product.name} added to cart`, [
+          { text: 'Continue' },
+          {
+            text: 'View Cart',
+            onPress: () => navigation.navigate('Cart'),
+          },
+        ]);
+      } else {
+        Alert.alert('Error', 'Failed to add to cart');
+      }
     } catch (error) {
       console.error('Error adding to cart:', error);
       Alert.alert('Error', 'Failed to add to cart');
@@ -125,7 +172,7 @@ const WishlistScreen = ({ navigation }) => {
         </Text>
 
         <Text style={styles.category} numberOfLines={1}>
-          {item.category}
+          {typeof item.category === 'string' ? item.category : item.category?.name || 'Other'}
         </Text>
 
         <Text style={styles.price}>₱{item.price?.toFixed(2)}</Text>
@@ -159,7 +206,7 @@ const WishlistScreen = ({ navigation }) => {
           disabled={item.stock === 0}
         >
           <MaterialCommunityIcons
-            name="shopping-cart"
+            name="cart"
             size={18}
             color={item.stock > 0 ? 'white' : '#999'}
           />
@@ -253,6 +300,15 @@ const WishlistScreen = ({ navigation }) => {
           </View>
         )}
       </SafeAreaView>
+
+      {/* NAVIGATION COMPONENT WITH RIGHT DRAWER */}
+      <Navigation
+        navigation={navigation}
+        currentScreen="Wishlist"
+        isLoggedIn={isLoggedIn}
+        userImage={userImage}
+        cartCount={cartCount}
+      />
     </View>
   );
 };
@@ -299,7 +355,7 @@ const styles = StyleSheet.create({
 
   listContent: {
     paddingTop: 8,
-    paddingBottom: 20,
+    paddingBottom: 100,
   },
 
   // Wishlist Card
