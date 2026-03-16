@@ -6,9 +6,10 @@ import {
   Image,
   TouchableOpacity,
   Alert,
-  TextInput,
+  Modal,
+  SafeAreaView,
 } from 'react-native';
-import { Text, Button } from 'react-native-paper';
+import { TextInput, Button, Text } from 'react-native-paper';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
@@ -27,6 +28,8 @@ const EditProfileScreen = ({ navigation }) => {
   const [profileImage, setProfileImage] = useState(null);
   const [loading, setLoading] = useState(false);
   const [initialLoad, setInitialLoad] = useState(true);
+  const [imagePickerModalVisible, setImagePickerModalVisible] = useState(false);
+  const [token, setToken] = useState(null);
 
   useEffect(() => {
     fetchUserData();
@@ -34,10 +37,39 @@ const EditProfileScreen = ({ navigation }) => {
 
   const fetchUserData = async () => {
     try {
+      // IMPORTANT: Use "token" key (matching your LoginScreen)
+      const savedToken = await AsyncStorage.getItem('token');
+      console.log('Token retrieved:', !!savedToken);
+
+      if (!savedToken) {
+        console.warn('No token found. User needs to login.');
+        Alert.alert(
+          'Session Expired',
+          'Please login again.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                AsyncStorage.multiRemove(['token', 'user']).then(() => {
+                  navigation.reset({
+                    index: 0,
+                    routes: [{ name: 'Login' }],
+                  });
+                });
+              },
+            },
+          ]
+        );
+        return;
+      }
+
+      setToken(savedToken);
+
       const userData = await AsyncStorage.getItem('user');
       if (userData) {
         const parsedUser = JSON.parse(userData);
-        console.log('Loaded user data:', parsedUser);
+        console.log('👤 User loaded:', parsedUser.fullName);
+
         setUser({
           id: parsedUser.id || parsedUser._id || '',
           fullName: parsedUser.fullName || '',
@@ -58,22 +90,120 @@ const EditProfileScreen = ({ navigation }) => {
     }
   };
 
-  const pickImage = async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  // ===== DETECT IMAGE MIME TYPE =====
+  const detectImageMimeType = (uri) => {
+    const uriParts = uri.split('.');
+    const fileExtension = uriParts[uriParts.length - 1].toLowerCase();
 
-    if (!permission.granted) {
-      Alert.alert('Permission required', 'Allow access to gallery');
-      return;
+    const mimeTypeMap = {
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      png: 'image/png',
+      gif: 'image/gif',
+      webp: 'image/webp',
+      bmp: 'image/bmp',
+      svg: 'image/svg+xml',
+      tiff: 'image/tiff',
+      ico: 'image/x-icon',
+      heic: 'image/heic',
+    };
+
+    return mimeTypeMap[fileExtension] || 'image/jpeg';
+  };
+
+  // ===== REQUEST CAMERA PERMISSION =====
+  const requestCameraPermission = async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permission Denied',
+          'Camera permission is required to take photos.'
+        );
+        return false;
+      }
+      return true;
+    } catch (error) {
+      console.error('Camera permission error:', error);
+      return false;
     }
+  };
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.7,
-    });
+  // ===== REQUEST MEDIA LIBRARY PERMISSION =====
+  const requestMediaLibraryPermission = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permission Denied',
+          'Media library permission is required to access photos.'
+        );
+        return false;
+      }
+      return true;
+    } catch (error) {
+      console.error('Media library permission error:', error);
+      return false;
+    }
+  };
 
-    if (!result.canceled) {
-      setProfileImage(result.assets[0]);
-      console.log('Image selected:', result.assets[0].uri);
+  // ===== TAKE PHOTO =====
+  const takePhoto = async () => {
+    try {
+      const hasPermission = await requestCameraPermission();
+      if (!hasPermission) return;
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.8,
+        aspect: [1, 1],
+      });
+
+      if (!result.canceled) {
+        const uri = result.assets[0].uri;
+        const mimeType = detectImageMimeType(uri);
+
+        setProfileImage({
+          uri,
+          type: mimeType,
+          fileName: 'profile.jpg',
+        });
+        console.log('Photo taken successfully:', { uri, mimeType });
+        setImagePickerModalVisible(false);
+      }
+    } catch (error) {
+      console.error('Camera error:', error);
+      Alert.alert('Error', 'Failed to take photo. Please try again.');
+    }
+  };
+
+  // ===== PICK IMAGE FROM LIBRARY =====
+  const pickImage = async () => {
+    try {
+      const hasPermission = await requestMediaLibraryPermission();
+      if (!hasPermission) return;
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.8,
+        allowsMultiple: false,
+      });
+
+      if (!result.canceled) {
+        const uri = result.assets[0].uri;
+        const mimeType = detectImageMimeType(uri);
+
+        setProfileImage({
+          uri,
+          type: mimeType,
+          fileName: result.assets[0].fileName || 'profile.jpg',
+        });
+        console.log('Image selected:', { uri, mimeType });
+        setImagePickerModalVisible(false);
+      }
+    } catch (error) {
+      console.error('Image picker error:', error);
+      Alert.alert('Error', 'Failed to pick image');
     }
   };
 
@@ -116,9 +246,9 @@ const EditProfileScreen = ({ navigation }) => {
   const performDeleteAccount = async () => {
     setLoading(true);
     try {
-      const token = await AsyncStorage.getItem('authToken');
-      
-      if (!token) {
+      const currentToken = token || (await AsyncStorage.getItem('token'));
+
+      if (!currentToken) {
         Alert.alert('Error', 'Not authenticated. Please login again.');
         navigation.navigate('Login');
         setLoading(false);
@@ -132,7 +262,7 @@ const EditProfileScreen = ({ navigation }) => {
         `${API_ENDPOINTS.AUTH}/delete-account`,
         {
           headers: {
-            'Authorization': token,
+            'Authorization': `Bearer ${currentToken}`,
           },
           timeout: 30000,
         }
@@ -141,7 +271,7 @@ const EditProfileScreen = ({ navigation }) => {
       console.log('Account deleted successfully:', response.data);
 
       // Clear all stored data
-      await AsyncStorage.multiRemove(['authToken', 'user', 'refreshToken']);
+      await AsyncStorage.multiRemove(['token', 'user', 'refreshToken']);
       console.log('All data cleared from AsyncStorage');
 
       Alert.alert('Account Deleted', 'Your account has been permanently deleted.', [
@@ -187,18 +317,18 @@ const EditProfileScreen = ({ navigation }) => {
     }
 
     // Additional validation for address
-    if (user.address && user.address.length < 10) {
-      Alert.alert('Error', 'Address must be at least 10 characters');
+    if (user.address && user.address.length < 5) {
+      Alert.alert('Error', 'Address must be at least 5 characters');
       return;
     }
 
     setLoading(true);
     try {
-      // Get auth token
-      const token = await AsyncStorage.getItem('authToken');
-      console.log('Token exists:', !!token);
-      
-      if (!token) {
+      // Get token from state first, fallback to AsyncStorage
+      const currentToken = token || (await AsyncStorage.getItem('token'));
+      console.log('Token exists:', !!currentToken);
+
+      if (!currentToken) {
         Alert.alert('Error', 'Not authenticated. Please login again.');
         navigation.navigate('Login');
         setLoading(false);
@@ -224,15 +354,15 @@ const EditProfileScreen = ({ navigation }) => {
       if (profileImage) {
         formData.append('picture', {
           uri: profileImage.uri,
-          type: 'image/jpeg',
-          name: profileImage.filename || 'profile.jpg',
+          type: profileImage.type || 'image/jpeg',
+          name: profileImage.fileName || 'profile.jpg',
         });
         console.log('New profile image included');
       }
 
       // Update via API
       console.log('Calling API:', `${API_ENDPOINTS.AUTH}/update-profile`);
-      console.log('Authorization header:', token.substring(0, 20) + '...');
+      console.log('Authorization header:', currentToken.substring(0, 20) + '...');
 
       const response = await axios.put(
         `${API_ENDPOINTS.AUTH}/update-profile`,
@@ -240,7 +370,7 @@ const EditProfileScreen = ({ navigation }) => {
         {
           headers: {
             'Content-Type': 'multipart/form-data',
-            'Authorization': token,
+            'Authorization': `Bearer ${currentToken}`,
           },
           timeout: 30000, // 30 second timeout
         }
@@ -300,23 +430,80 @@ const EditProfileScreen = ({ navigation }) => {
     return 'https://i.pinimg.com/736x/4f/a9/1d/4fa91db9a2e3f4077cb29e85ab3e270c.jpg';
   };
 
-  const InputField = ({ label, value, onChangeText, placeholder, multiline = false, required = false }) => (
-    <View style={styles.inputContainer}>
-      <Text style={styles.inputLabel}>
-        {label}
-        {required && <Text style={styles.requiredAsterisk}> *</Text>}
-      </Text>
-      <TextInput
-        style={[styles.input, multiline && styles.inputMultiline]}
-        placeholder={placeholder}
-        value={value}
-        onChangeText={onChangeText}
-        multiline={multiline}
-        numberOfLines={multiline ? 4 : 1}
-        editable={!loading}
-        placeholderTextColor="#ccc"
-      />
-    </View>
+  // ===== IMAGE PICKER MODAL COMPONENT =====
+  const ImagePickerModal = () => (
+    <Modal
+      visible={imagePickerModalVisible}
+      animationType="slide"
+      transparent={true}
+      onRequestClose={() => setImagePickerModalVisible(false)}
+    >
+      <SafeAreaView style={styles.pickerModalContainer}>
+        <View style={styles.pickerModalContent}>
+          <View style={styles.pickerModalHeader}>
+            <Text style={styles.pickerModalTitle}>Choose Profile Photo</Text>
+            <TouchableOpacity
+              onPress={() => setImagePickerModalVisible(false)}
+            >
+              <MaterialCommunityIcons
+                name="close"
+                size={28}
+                color="#333"
+              />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.pickerOptionsContainer}>
+            {/* TAKE PHOTO OPTION */}
+            <TouchableOpacity
+              style={styles.pickerOption}
+              onPress={takePhoto}
+            >
+              <View style={styles.pickerOptionIcon}>
+                <MaterialCommunityIcons
+                  name="camera"
+                  size={48}
+                  color="#fff"
+                />
+              </View>
+              <View style={styles.pickerOptionText}>
+                <Text style={styles.pickerOptionTitle}>Take a Photo</Text>
+                <Text style={styles.pickerOptionDesc}>
+                  Use your camera to capture a new photo
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* UPLOAD FROM LIBRARY OPTION */}
+            <TouchableOpacity
+              style={styles.pickerOption}
+              onPress={pickImage}
+            >
+              <View style={styles.pickerOptionIcon}>
+                <MaterialCommunityIcons
+                  name="image-multiple"
+                  size={48}
+                  color="#fff"
+                />
+              </View>
+              <View style={styles.pickerOptionText}>
+                <Text style={styles.pickerOptionTitle}>Upload Photo</Text>
+                <Text style={styles.pickerOptionDesc}>
+                  Choose from your photo gallery
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity
+            style={styles.pickerCancelBtn}
+            onPress={() => setImagePickerModalVisible(false)}
+          >
+            <Text style={styles.pickerCancelText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    </Modal>
   );
 
   if (initialLoad) {
@@ -340,18 +527,20 @@ const EditProfileScreen = ({ navigation }) => {
 
       {/* PROFILE IMAGE SECTION */}
       <View style={styles.profileSection}>
-        <Image
-          source={{ uri: getProfilePicture() }}
-          style={styles.profileImage}
-          onError={() => console.log('Failed to load profile image')}
-        />
-        <TouchableOpacity 
-          style={styles.cameraButton}
-          onPress={pickImage}
+        <TouchableOpacity
+          onPress={() => setImagePickerModalVisible(true)}
           disabled={loading}
         >
-          <MaterialCommunityIcons name="camera" size={20} color="white" />
+          <Image
+            source={{ uri: getProfilePicture() }}
+            style={styles.profileImage}
+            onError={() => console.log('Failed to load profile image')}
+          />
+          <View style={styles.cameraButtonOverlay}>
+            <MaterialCommunityIcons name="camera" size={20} color="white" />
+          </View>
         </TouchableOpacity>
+
         {profileImage && (
           <View style={styles.imageSelectedBadge}>
             <MaterialCommunityIcons name="check" size={16} color="white" />
@@ -361,37 +550,61 @@ const EditProfileScreen = ({ navigation }) => {
 
       {/* FORM SECTION */}
       <View style={styles.formSection}>
-        <InputField
+        <TextInput
           label="Full Name"
           value={user.fullName}
           onChangeText={(text) => setUser({ ...user, fullName: text })}
           placeholder="Enter your full name"
-          required={true}
+          mode="outlined"
+          style={styles.input}
+          outlineColor="#B76E79"
+          activeOutlineColor="#B76E79"
+          theme={{ roundness: 20 }}
+          editable={!loading}
         />
 
-        <InputField
+        <TextInput
           label="Email"
           value={user.email}
           onChangeText={(text) => setUser({ ...user, email: text })}
           placeholder="Enter your email"
-          required={true}
+          mode="outlined"
+          style={styles.input}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          outlineColor="#B76E79"
+          activeOutlineColor="#B76E79"
+          theme={{ roundness: 20 }}
+          editable={!loading}
         />
 
-        <InputField
+        <TextInput
           label="Phone Number"
           value={user.phone}
           onChangeText={(text) => setUser({ ...user, phone: text })}
           placeholder="Enter your phone number"
-          required={true}
+          mode="outlined"
+          style={styles.input}
+          keyboardType="phone-pad"
+          outlineColor="#B76E79"
+          activeOutlineColor="#B76E79"
+          theme={{ roundness: 20 }}
+          editable={!loading}
         />
 
-        <InputField
+        <TextInput
           label="Address"
           value={user.address}
           onChangeText={(text) => setUser({ ...user, address: text })}
           placeholder="Enter your address"
-          multiline={true}
-          required={true}
+          mode="outlined"
+          style={styles.input}
+          multiline
+          numberOfLines={3}
+          outlineColor="#B76E79"
+          activeOutlineColor="#B76E79"
+          theme={{ roundness: 20 }}
+          editable={!loading}
         />
 
         {/* INFO BOX */}
@@ -437,6 +650,9 @@ const EditProfileScreen = ({ navigation }) => {
           Cancel
         </Button>
       </View>
+
+      {/* ===== IMAGE PICKER MODAL ===== */}
+      <ImagePickerModal />
     </ScrollView>
   );
 };
@@ -478,18 +694,18 @@ const styles = StyleSheet.create({
   },
 
   profileImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
     borderWidth: 3,
     borderColor: '#B76E79',
     backgroundColor: '#f0f0f0',
   },
 
-  cameraButton: {
+  cameraButtonOverlay: {
     position: 'absolute',
-    bottom: 30,
-    right: '35%',
+    bottom: 10,
+    right: 10,
     backgroundColor: '#B76E79',
     width: 40,
     height: 40,
@@ -497,12 +713,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     elevation: 3,
+    borderWidth: 2,
+    borderColor: 'white',
   },
 
   imageSelectedBadge: {
     position: 'absolute',
-    bottom: 25,
-    right: '33%',
+    bottom: 5,
+    right: 5,
     backgroundColor: '#4CAF50',
     width: 30,
     height: 30,
@@ -517,36 +735,9 @@ const styles = StyleSheet.create({
     padding: 20,
   },
 
-  inputContainer: {
-    marginBottom: 20,
-  },
-
-  inputLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-  },
-
-  requiredAsterisk: {
-    color: '#E53935',
-    fontWeight: 'bold',
-  },
-
   input: {
+    marginBottom: 16,
     backgroundColor: 'white',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 14,
-    color: '#333',
-  },
-
-  inputMultiline: {
-    textAlignVertical: 'top',
-    paddingTop: 12,
   },
 
   infoBox: {
@@ -571,6 +762,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#B76E79',
     marginBottom: 12,
     paddingVertical: 8,
+    borderRadius: 20,
   },
 
   updateButtonLabel: {
@@ -582,6 +774,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#E53935',
     marginBottom: 12,
     paddingVertical: 8,
+    borderRadius: 20,
   },
 
   deleteButtonLabel: {
@@ -591,12 +784,88 @@ const styles = StyleSheet.create({
 
   cancelButton: {
     borderColor: '#B76E79',
+    paddingVertical: 4,
+    borderRadius: 20,
   },
 
   cancelButtonLabel: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#B76E79',
+  },
+
+  // ========== IMAGE PICKER MODAL STYLES ==========
+  pickerModalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  pickerModalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: 20,
+  },
+  pickerModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  pickerModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#333',
+  },
+  pickerOptionsContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 20,
+    gap: 12,
+  },
+  pickerOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+    borderRadius: 12,
+    padding: 16,
+    gap: 16,
+  },
+  pickerOptionIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 12,
+    backgroundColor: '#B76E79',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pickerOptionText: {
+    flex: 1,
+  },
+  pickerOptionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#333',
+    marginBottom: 4,
+  },
+  pickerOptionDesc: {
+    fontSize: 13,
+    color: '#666',
+  },
+  pickerCancelBtn: {
+    marginHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  pickerCancelText: {
+    textAlign: 'center',
+    color: '#666',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
 
