@@ -6,7 +6,8 @@ export const API_ENDPOINTS = {
   PRODUCTS: `${API_BASE_URL}/api/products`,
   ORDERS: `${API_BASE_URL}/api/orders`,
   USERS: `${API_BASE_URL}/api/users`,
-  CART: `${API_BASE_URL}/api/cart`
+  CART: `${API_BASE_URL}/api/cart`,
+  ORDERS: `${API_BASE_URL}/api/orders`,
 };
 
 export default API_BASE_URL;

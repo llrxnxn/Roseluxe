@@ -242,7 +242,7 @@ const Navigation = ({
               <DrawerMenuItem
                 icon="package"
                 label="My Orders"
-                onPress={() => handleDrawerNavigation('TransactionHistory')}
+                onPress={() => handleDrawerNavigation('Orders')}
               />
             </>
           )}

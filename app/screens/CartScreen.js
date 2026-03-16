@@ -10,6 +10,10 @@ import {
   SafeAreaView,
   Dimensions,
   ActivityIndicator,
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
+  TextInput,
 } from "react-native";
 import { Button, Text } from "react-native-paper";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -24,12 +28,13 @@ const { width } = Dimensions.get("window");
 const CartScreen = ({ navigation }) => {
   const [cart, setCart] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [cartCount, setCartCount] = useState(0);
   const [user, setUser] = useState(null);
   const [selectedItems, setSelectedItems] = useState(new Set());
   const [selectAll, setSelectAll] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userImage, setUserImage] = useState(null);
-  const [cartCount, setCartCount] = useState(0);
+
 
   // Use useFocusEffect to reload cart when screen is focused
   useFocusEffect(
@@ -39,21 +44,7 @@ const CartScreen = ({ navigation }) => {
     }, [])
   );
 
-  const checkLoginStatus = async () => {
-    try {
-      const user = await AsyncStorage.getItem("user");
-      setIsLoggedIn(!!user);
-      if (user) {
-        const parsedUser = JSON.parse(user);
-        if (parsedUser.picture) {
-          setUserImage(parsedUser.picture);
-        }
-      }
-    } catch (error) {
-      console.log("Error checking login status:", error);
-      setIsLoggedIn(false);
-    }
-  };
+
 
   const loadUserAndCart = async () => {
     try {
@@ -76,7 +67,6 @@ const CartScreen = ({ navigation }) => {
       console.log("Loaded user:", parsedUser);
       setUser(parsedUser);
 
-      // Use the correct user ID field (might be _id or id)
       const userId = parsedUser._id || parsedUser.id;
       if (!userId) {
         console.log("No user ID found");
@@ -100,7 +90,7 @@ const CartScreen = ({ navigation }) => {
       console.log(`Fetching cart for user: ${userId}`);
 
       const response = await axios.get(`${API_ENDPOINTS.CART}/${userId}`, {
-        headers: { 
+        headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
@@ -109,10 +99,10 @@ const CartScreen = ({ navigation }) => {
       console.log("Cart API Response:", response.data);
 
       if (response.data.success && response.data.data) {
-        const cartData = Array.isArray(response.data.data) 
-          ? response.data.data 
+        const cartData = Array.isArray(response.data.data)
+          ? response.data.data
           : response.data.data.items || [];
-        
+
         console.log("Cart items:", cartData);
         setCart(cartData);
         setCartCount(cartData.reduce((t, i) => t + i.quantity, 0));
@@ -130,14 +120,14 @@ const CartScreen = ({ navigation }) => {
       console.log("Status:", error.response?.status);
       console.log("Data:", error.response?.data);
       console.log("Message:", error.message);
-      
+
       if (error.response?.status === 401) {
         Alert.alert("Session Expired", "Please login again");
         navigation.navigate("Login");
       } else {
         Alert.alert("Error", "Failed to load cart. Please try again.");
       }
-      
+
       setCart([]);
       setSelectedItems(new Set());
       setSelectAll(false);
@@ -146,6 +136,23 @@ const CartScreen = ({ navigation }) => {
       setIsLoading(false);
     }
   };
+
+  // Add after fetchCart function:
+const checkLoginStatus = async () => {
+  try {
+    const user = await AsyncStorage.getItem("user");
+    setIsLoggedIn(!!user);
+    if (user) {
+      const parsedUser = JSON.parse(user);
+      if (parsedUser.picture) {
+        setUserImage(parsedUser.picture);
+      }
+    }
+  } catch (error) {
+    console.log("Error checking login status:", error);
+    setIsLoggedIn(false);
+  }
+};
 
   // Toggle individual item selection
   const toggleItemSelection = (productId) => {
@@ -156,8 +163,7 @@ const CartScreen = ({ navigation }) => {
       newSelected.add(productId);
     }
     setSelectedItems(newSelected);
-    
-    // Update selectAll if needed
+
     if (newSelected.size === cart.length && cart.length > 0) {
       setSelectAll(true);
     } else {
@@ -195,8 +201,8 @@ const CartScreen = ({ navigation }) => {
       console.log("Update response:", response.data);
 
       if (response.data.success) {
-        const updatedCart = Array.isArray(response.data.data) 
-          ? response.data.data 
+        const updatedCart = Array.isArray(response.data.data)
+          ? response.data.data
           : response.data.data.items || [];
         setCart(updatedCart);
         setCartCount(updatedCart.reduce((t, i) => t + i.quantity, 0));
@@ -226,17 +232,16 @@ const CartScreen = ({ navigation }) => {
       console.log("Remove response:", response.data);
 
       if (response.data.success) {
-        const updatedCart = Array.isArray(response.data.data) 
-          ? response.data.data 
+        const updatedCart = Array.isArray(response.data.data)
+          ? response.data.data
           : response.data.data.items || [];
         setCart(updatedCart);
         setCartCount(updatedCart.reduce((t, i) => t + i.quantity, 0));
-        
-        // Remove from selected items
+
         const newSelected = new Set(selectedItems);
         newSelected.delete(productId);
         setSelectedItems(newSelected);
-        
+
         Alert.alert("Removed", "Item removed from cart");
       } else {
         Alert.alert("Error", response.data.error || "Cannot remove item");
@@ -263,7 +268,6 @@ const CartScreen = ({ navigation }) => {
           text: "Delete",
           style: "destructive",
           onPress: async () => {
-            // Delete all selected items
             for (const productId of selectedItems) {
               await handleRemoveItem(productId);
             }
@@ -272,6 +276,8 @@ const CartScreen = ({ navigation }) => {
       ]
     );
   };
+
+
 
   const handleCheckout = () => {
     if (!user) {
@@ -291,23 +297,11 @@ const CartScreen = ({ navigation }) => {
       return;
     }
 
-    if (selectedItems.size > 0) {
-      const selectedCount = selectedItems.size;
-      const selectedTotal = cart
-        .filter(item => selectedItems.has(item.productId))
-        .reduce((sum, item) => sum + (item.price * item.quantity || 0), 0);
-      
-      Alert.alert(
-        "Proceed to Checkout",
-        `${selectedCount} item(s) selected\nTotal: ₱${selectedTotal.toFixed(2)}`,
-        [
-          { text: "Cancel" },
-          { text: "Checkout", onPress: () => {
-            Alert.alert("Coming Soon", "Checkout functionality coming soon!");
-          }},
-        ]
-      );
-    }
+    // Navigate to CheckoutScreen instead of modal
+    navigation.navigate("Checkout", {
+      selectedItems,
+      cartItems: cart,
+    });
   };
 
   const renderCartItem = ({ item }) => {
@@ -315,7 +309,6 @@ const CartScreen = ({ navigation }) => {
 
     return (
       <View style={styles.cartItem}>
-        {/* Checkbox */}
         <TouchableOpacity
           style={styles.checkbox}
           onPress={() => toggleItemSelection(item.productId)}
@@ -327,13 +320,11 @@ const CartScreen = ({ navigation }) => {
           </View>
         </TouchableOpacity>
 
-        {/* Product Image */}
         <Image
           source={{ uri: item.image || "https://via.placeholder.com/80" }}
           style={styles.cartItemImage}
         />
 
-        {/* Item Details */}
         <View style={styles.itemDetails}>
           <Text style={styles.itemName} numberOfLines={2}>
             {item.productName}
@@ -341,7 +332,6 @@ const CartScreen = ({ navigation }) => {
           <Text style={styles.itemPrice}>₱{item.price?.toFixed(2)}</Text>
         </View>
 
-        {/* Item Actions */}
         <View style={styles.itemActions}>
           <View style={styles.quantityControl}>
             <TouchableOpacity
@@ -363,8 +353,8 @@ const CartScreen = ({ navigation }) => {
 
           <Text style={styles.itemTotal}>₱{(item.price * item.quantity).toFixed(2)}</Text>
 
-          <TouchableOpacity 
-            onPress={() => handleRemoveItem(item.productId)} 
+          <TouchableOpacity
+            onPress={() => handleRemoveItem(item.productId)}
             style={styles.removeBtn}
           >
             <MaterialCommunityIcons name="trash-can" size={18} color="#F44336" />
@@ -378,7 +368,7 @@ const CartScreen = ({ navigation }) => {
   const selectedSubtotal = cart
     .filter(item => selectedItems.has(item.productId))
     .reduce((sum, item) => sum + (item.price * item.quantity || 0), 0);
-  
+
   const selectedTax = selectedSubtotal * 0.12;
   const selectedTotal = selectedSubtotal + selectedTax;
 
@@ -397,7 +387,6 @@ const CartScreen = ({ navigation }) => {
         <Text style={styles.logoText}>ROSELUXE</Text>
       </View>
 
-      {/* TOP HEADER WITH DELETE AND SELECTION COUNT */}
       {cart.length > 0 && (
         <View style={styles.topHeader}>
           <Text style={styles.topHeaderTitle}>Shopping Cart</Text>
@@ -406,7 +395,7 @@ const CartScreen = ({ navigation }) => {
               <Text style={styles.selectionCountText}>
                 {selectedItems.size} item{selectedItems.size > 1 ? 's' : ''} selected
               </Text>
-              <TouchableOpacity 
+              <TouchableOpacity
                 onPress={handleBulkDelete}
                 style={styles.topDeleteBtn}
               >
@@ -421,7 +410,6 @@ const CartScreen = ({ navigation }) => {
         {cart.length > 0 ? (
           <>
             <ScrollView contentContainerStyle={styles.container}>
-              {/* Header with Select All */}
               <View style={styles.header}>
                 <View style={styles.headerLeft}>
                   <TouchableOpacity
@@ -441,7 +429,6 @@ const CartScreen = ({ navigation }) => {
                 <Text style={styles.itemCount}>{cart.length} items</Text>
               </View>
 
-              {/* Cart Items */}
               <FlatList
                 data={cart}
                 renderItem={renderCartItem}
@@ -450,7 +437,6 @@ const CartScreen = ({ navigation }) => {
                 contentContainerStyle={styles.listContent}
               />
 
-              {/* Summary for Selected Items */}
               {selectedItems.size > 0 && (
                 <View style={styles.summaryContainer}>
                   <View style={styles.summaryRow}>
@@ -473,12 +459,11 @@ const CartScreen = ({ navigation }) => {
               )}
             </ScrollView>
 
-            {/* Bottom Action Bar */}
             <View style={styles.checkoutContainer}>
               <View style={styles.buttonContainer}>
-                <Button 
-                  mode="contained" 
-                  onPress={handleCheckout} 
+                <Button
+                  mode="contained"
+                  onPress={handleCheckout}
                   style={[
                     styles.checkoutBtn,
                     selectedItems.size === 0 && styles.checkoutBtnDisabled
@@ -489,9 +474,9 @@ const CartScreen = ({ navigation }) => {
                   {selectedItems.size > 0 ? `Checkout (${selectedItems.size})` : "Select items"}
                 </Button>
 
-                <Button 
-                  mode="outlined" 
-                  onPress={() => navigation.navigate("Products")} 
+                <Button
+                  mode="outlined"
+                  onPress={() => navigation.navigate("Products")}
                   style={styles.continueBtnBtn}
                 >
                   Continue Shopping
@@ -506,9 +491,9 @@ const CartScreen = ({ navigation }) => {
             <Text style={styles.emptySubtext}>
               Add some beautiful satin flowers to get started!
             </Text>
-            <Button 
-              mode="contained" 
-              onPress={() => navigation.navigate("Products")} 
+            <Button
+              mode="contained"
+              onPress={() => navigation.navigate("Products")}
               style={styles.emptyBtn}
               labelStyle={styles.buttonLabel}
             >
@@ -518,7 +503,9 @@ const CartScreen = ({ navigation }) => {
         )}
       </SafeAreaView>
 
-      {/* NAVIGATION COMPONENT WITH RIGHT DRAWER */}
+
+
+      {/* NAVIGATION COMPONENT */}
       <Navigation
         navigation={navigation}
         currentScreen="Cart"
@@ -533,8 +520,7 @@ const CartScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   mainContainer: { flex: 1, backgroundColor: "#FFF5F7" },
   container: { flexGrow: 1, paddingBottom: 20 },
-  
-  // Logo Section - ROSELUXE
+
   logoSection: {
     paddingVertical: 16,
     paddingHorizontal: 16,
@@ -553,7 +539,6 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 
-  /* TOP HEADER WITH DELETE AND SELECTION */
   topHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -589,15 +574,14 @@ const styles = StyleSheet.create({
     padding: 4,
   },
 
-  /* HEADER WITH CHECKBOX */
-  header: { 
-    flexDirection: "row", 
-    justifyContent: "space-between", 
-    alignItems: "center", 
-    padding: 16, 
-    backgroundColor: "white", 
-    borderBottomWidth: 1, 
-    borderBottomColor: "#f0f0f0" 
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 16,
+    backgroundColor: "white",
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0"
   },
   headerLeft: {
     flexDirection: "row",
@@ -609,17 +593,16 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#333",
   },
-  itemCount: { 
-    fontSize: 14, 
-    color: "#B76E79", 
-    fontWeight: "600", 
-    backgroundColor: "#FFE8ED", 
-    paddingHorizontal: 10, 
-    paddingVertical: 4, 
-    borderRadius: 12 
+  itemCount: {
+    fontSize: 14,
+    color: "#B76E79",
+    fontWeight: "600",
+    backgroundColor: "#FFE8ED",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12
   },
 
-  /* CHECKBOX STYLES */
   checkbox: {
     padding: 4,
   },
@@ -638,114 +621,111 @@ const styles = StyleSheet.create({
     borderColor: "#B76E79",
   },
 
-  /* CART ITEM */
   listContent: { padding: 12 },
-  cartItem: { 
-    flexDirection: "row", 
-    backgroundColor: "white", 
-    borderRadius: 10, 
-    padding: 12, 
-    marginBottom: 12, 
-    elevation: 2, 
+  cartItem: {
+    flexDirection: "row",
+    backgroundColor: "white",
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 12,
+    elevation: 2,
     alignItems: "center",
     gap: 10,
   },
-  cartItemImage: { 
-    width: 80, 
-    height: 80, 
+  cartItemImage: {
+    width: 80,
+    height: 80,
     borderRadius: 8,
   },
   itemDetails: { flex: 1 },
-  itemName: { 
-    fontSize: 14, 
-    fontWeight: "600", 
-    color: "#333", 
-    marginBottom: 4 
+  itemName: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 4
   },
-  itemPrice: { 
-    fontSize: 14, 
-    fontWeight: "700", 
-    color: "#B76E79" 
+  itemPrice: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#B76E79"
   },
-  itemActions: { 
-    alignItems: "flex-end", 
-    gap: 8 
+  itemActions: {
+    alignItems: "flex-end",
+    gap: 8
   },
-  quantityControl: { 
-    flexDirection: "row", 
-    alignItems: "center", 
-    borderWidth: 1, 
-    borderColor: "#ddd", 
-    borderRadius: 6, 
-    paddingHorizontal: 4 
+  quantityControl: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 6,
+    paddingHorizontal: 4
   },
-  qtyBtn: { 
-    paddingHorizontal: 6, 
-    paddingVertical: 4 
+  qtyBtn: {
+    paddingHorizontal: 6,
+    paddingVertical: 4
   },
-  qtyBtnText: { 
-    fontSize: 14, 
-    fontWeight: "600", 
-    color: "#B76E79" 
+  qtyBtnText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#B76E79"
   },
-  qtyValue: { 
-    marginHorizontal: 8, 
-    fontSize: 12, 
-    fontWeight: "600", 
-    color: "#333" 
+  qtyValue: {
+    marginHorizontal: 8,
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#333"
   },
-  itemTotal: { 
-    fontSize: 13, 
-    fontWeight: "700", 
-    color: "#333" 
+  itemTotal: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#333"
   },
-  removeBtn: { 
-    padding: 6 
-  },
-
-  /* SUMMARY */
-  summaryContainer: { 
-    backgroundColor: "white", 
-    marginHorizontal: 12, 
-    borderRadius: 10, 
-    padding: 16, 
-    elevation: 2, 
-    marginTop: 12 
-  },
-  summaryRow: { 
-    flexDirection: "row", 
-    justifyContent: "space-between", 
-    marginBottom: 12 
-  },
-  summaryLabel: { 
-    fontSize: 14, 
-    color: "#666", 
-    fontWeight: "500" 
-  },
-  summaryValue: { 
-    fontSize: 14, 
-    color: "#333", 
-    fontWeight: "600" 
-  },
-  totalRow: { 
-    paddingTop: 12, 
-    borderTopWidth: 1, 
-    borderTopColor: "#f0f0f0", 
-    marginBottom: 0 
-  },
-  totalLabel: { 
-    fontSize: 16, 
-    color: "#333", 
-    fontWeight: "700" 
-  },
-  totalValue: { 
-    fontSize: 18, 
-    color: "#B76E79", 
-    fontWeight: "700" 
+  removeBtn: {
+    padding: 6
   },
 
-  /* CHECKOUT AREA */
-  checkoutContainer: { 
+  summaryContainer: {
+    backgroundColor: "white",
+    marginHorizontal: 12,
+    borderRadius: 10,
+    padding: 16,
+    elevation: 2,
+    marginTop: 12
+  },
+  summaryRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 12
+  },
+  summaryLabel: {
+    fontSize: 14,
+    color: "#666",
+    fontWeight: "500"
+  },
+  summaryValue: {
+    fontSize: 14,
+    color: "#333",
+    fontWeight: "600"
+  },
+  totalRow: {
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#f0f0f0",
+    marginBottom: 0
+  },
+  totalLabel: {
+    fontSize: 16,
+    color: "#333",
+    fontWeight: "700"
+  },
+  totalValue: {
+    fontSize: 18,
+    color: "#B76E79",
+    fontWeight: "700"
+  },
+
+  checkoutContainer: {
     backgroundColor: "#fff",
     paddingHorizontal: 16,
     paddingVertical: 60,
@@ -757,9 +737,9 @@ const styles = StyleSheet.create({
   buttonContainer: {
     gap: 10,
   },
-  checkoutBtn: { 
-    backgroundColor: "#B76E79", 
-    paddingVertical: 8 
+  checkoutBtn: {
+    backgroundColor: "#B76E79",
+    paddingVertical: 8
   },
   checkoutBtnDisabled: {
     backgroundColor: "#ddd",
@@ -768,51 +748,224 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "bold",
   },
-  continueBtnBtn: { 
-    borderColor: "#B76E79", 
-    paddingVertical: 8 
+  continueBtnBtn: {
+    borderColor: "#B76E79",
+    paddingVertical: 8
   },
 
-  /* EMPTY STATE */
-  emptyContainer: { 
-    flex: 1, 
-    justifyContent: "center", 
-    alignItems: "center", 
-    paddingHorizontal: 20 
+  emptyContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 20
   },
-  emptyIcon: { 
-    fontSize: 80, 
-    marginBottom: 16 
+  emptyIcon: {
+    fontSize: 80,
+    marginBottom: 16
   },
-  emptyText: { 
-    fontSize: 20, 
-    fontWeight: "700", 
-    color: "#333", 
-    marginBottom: 8, 
-    textAlign: "center" 
+  emptyText: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#333",
+    marginBottom: 8,
+    textAlign: "center"
   },
-  emptySubtext: { 
-    fontSize: 14, 
-    color: "#999", 
-    marginBottom: 24, 
-    textAlign: "center" 
+  emptySubtext: {
+    fontSize: 14,
+    color: "#999",
+    marginBottom: 24,
+    textAlign: "center"
   },
-  emptyBtn: { 
-    backgroundColor: "#B76E79", 
-    paddingVertical: 8, 
-    minWidth: 200 
+  emptyBtn: {
+    backgroundColor: "#B76E79",
+    paddingVertical: 8,
+    minWidth: 200
   },
 
-  /* LOADING */
-  loadingContainer: { 
-    flex: 1, 
-    justifyContent: "center", 
-    alignItems: "center" 
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center"
   },
   loadingText: {
     marginTop: 12,
     color: "#999",
     fontSize: 14,
+  },
+
+  // ===== MODAL STYLES =====
+  modalContainer: {
+    flex: 1,
+    backgroundColor: "#FFF5F7",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    backgroundColor: "white",
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  modalBackBtn: {
+    padding: 8,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#333",
+    flex: 1,
+    textAlign: "center",
+  },
+  modalContent: {
+    padding: 16,
+    paddingBottom: 100,
+  },
+  stepTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#333",
+    marginBottom: 16,
+  },
+
+  // Modal Item Card
+  modalItemCard: {
+    flexDirection: "row",
+    backgroundColor: "white",
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 12,
+    alignItems: "center",
+    gap: 12,
+  },
+  modalItemImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+  },
+  modalItemInfo: {
+    flex: 1,
+  },
+  modalItemName: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#333",
+  },
+  modalItemQty: {
+    fontSize: 12,
+    color: "#999",
+    marginTop: 4,
+  },
+  modalItemPrice: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#B76E79",
+  },
+
+  modalSummary: {
+    backgroundColor: "white",
+    borderRadius: 10,
+    padding: 16,
+    marginTop: 12,
+  },
+
+  // Text Inputs
+  textInput: {
+    backgroundColor: "white",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    marginBottom: 12,
+    fontSize: 14,
+    color: "#333",
+  },
+  rowInputs: {
+    flexDirection: "row",
+  },
+
+  // Payment Method
+  paymentMethodContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 20,
+    gap: 10,
+  },
+  paymentMethodBtn: {
+    flex: 1,
+    backgroundColor: "white",
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: "#ddd",
+    paddingVertical: 16,
+    alignItems: "center",
+    gap: 8,
+  },
+  paymentMethodBtnActive: {
+    borderColor: "#B76E79",
+    backgroundColor: "#FFF5F7",
+  },
+  paymentMethodLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#999",
+    textAlign: "center",
+  },
+  paymentMethodLabelActive: {
+    color: "#B76E79",
+  },
+
+  paymentInfo: {
+    backgroundColor: "#FFF5F7",
+    borderRadius: 8,
+    padding: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 12,
+  },
+  paymentInfoText: {
+    fontSize: 12,
+    color: "#B76E79",
+    flex: 1,
+  },
+
+  // Confirm Section
+  confirmCard: {
+    backgroundColor: "white",
+    borderRadius: 10,
+    padding: 16,
+    marginBottom: 12,
+  },
+  confirmLabel: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#333",
+    marginBottom: 8,
+  },
+  confirmValue: {
+    fontSize: 13,
+    color: "#666",
+    marginBottom: 4,
+  },
+
+  // Modal Footer
+  modalFooter: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: "white",
+    borderTopWidth: 1,
+    borderTopColor: "#f0f0f0",
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  nextBtn: {
+    backgroundColor: "#B76E79",
+    paddingVertical: 8,
   },
 });
 

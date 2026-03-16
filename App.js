@@ -9,9 +9,10 @@ import RegisterScreen from './app/screens/auth/RegisterScreen';
 import ProfileScreen from './app/screens/ProfileScreen';
 import EditProfileScreen from './app/screens/EditProfileScreen';
 import AboutUsScreen from './app/screens/AboutUsScreen';
-// import TransactionHistoryScreen from './app/screens/TransactionHistoryScreen';
+import OrdersScreen from './app/screens/OrderScreen';
 import CartScreen from './app/screens/CartScreen';
 import WishlistScreen from './app/screens/WishlistScreen';
+import CheckoutScreen from './app/screens/CheckoutScreen';
 
 import AdminDashboard from './app/screens/admin/AdminDashboard';
 import AdminProducts from './app/screens/admin/AdminProduct';
@@ -78,9 +79,10 @@ export default function App() {
         <Stack.Screen name="Profile" component={ProfileScreen} />
         <Stack.Screen name="EditProfile" component={EditProfileScreen} />
         <Stack.Screen name="AboutUs" component={AboutUsScreen} />
-        {/* <Stack.Screen name="TransactionHistory" component={TransactionHistoryScreen} /> */}
         <Stack.Screen name="Cart" component={CartScreen} />
         <Stack.Screen name="Wishlist" component={WishlistScreen} />
+        <Stack.Screen name="Checkout" component={CheckoutScreen} />
+        <Stack.Screen name="Orders" component={OrdersScreen} />
 
         {/* Admin Screens */}
         <Stack.Screen name="AdminDashboard" component={AdminDashboard} />
