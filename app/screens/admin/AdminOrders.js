@@ -15,20 +15,26 @@ import {
 import { Text } from 'react-native-paper';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+// Redux imports
+import { useDispatch, useSelector } from 'react-redux';
+import { fetchOrders, updateOrderStatus, clearSuccess } from '../redux/slices/ordersSlice';
 import AdminHeader from './AdminHeader';
-import { API_ENDPOINTS } from '../../config/api';
 
 const AdminOrders = ({ navigation }) => {
-  const [orders, setOrders] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  // ================= REDUX =================
+  const dispatch = useDispatch();
+  const { items: orders, loading, error, updating, success, refreshing } = useSelector(
+    (state) => state.orders
+  );
+
+  // ================= LOCAL STATE =================
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [detailsModalVisible, setDetailsModalVisible] = useState(false);
   const [filterStatus, setFilterStatus] = useState('all');
-  const [sortOrder, setSortOrder] = useState('newest'); // 'newest' or 'oldest'
-  const [updating, setUpdating] = useState(false);
+  const [sortOrder, setSortOrder] = useState('newest');
   const [authToken, setAuthToken] = useState(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Menu items configuration
   const menuItems = [
@@ -91,7 +97,7 @@ const AdminOrders = ({ navigation }) => {
   // ================= INIT TOKEN =================
   useEffect(() => {
     const init = async () => {
-      const token = await AsyncStorage.getItem('token');
+      const token = await AsyncStorage.getItem('authToken');
       if (!token) {
         Alert.alert('Login required');
         navigation.navigate('Login');
@@ -102,98 +108,47 @@ const AdminOrders = ({ navigation }) => {
     init();
   }, []);
 
-  // ================= FETCH =================
-  const fetchOrders = useCallback(async () => {
-    try {
-      if (!authToken) return;
-
-      setRefreshing(true);
-
-      const response = await fetch(API_ENDPOINTS.ADMIN_GET_ALL_ORDERS, {
-        headers: {
-          Authorization: `Bearer ${authToken}`,
-        },
-      });
-
-      const data = await response.json();
-
-      if (response.ok && data.success) {
-        // Transform orders to match UI expectations
-        const transformedOrders = (data.data || []).map((order) => ({
-          _id: order._id,
-          orderId: order.orderId,
-          orderStatus: order.orderStatus,
-          createdAt: order.createdAt,
-          paymentMethod: order.shippingInfo?.payment?.method || 'N/A',
-          totalAmount: order.totals?.totalAmount || 0,
-          items: (order.items || []).map(item => ({
-            name: item.productName,
-            quantity: item.quantity,
-            price: item.price,
-            image: item.image,
-          })),
-          user: {
-            fullname: order.shippingInfo?.fullName || 'N/A',
-            phone: order.shippingInfo?.phone || 'N/A',
-            address: order.shippingInfo?.address || 'N/A',
-            country: order.shippingInfo?.country || 'PH',
-          },
-        }));
-        setOrders(transformedOrders);
-      } else {
-        Alert.alert('Error', data.error || 'Failed to fetch');
-      }
-    } catch (err) {
-      console.log('Fetch error:', err);
-      Alert.alert('Error', 'Network error');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [authToken]);
-
+  // ================= FETCH ORDERS FROM REDUX =================
   useEffect(() => {
     if (authToken) {
-      fetchOrders();
+      dispatch(fetchOrders(authToken));
     }
-  }, [authToken, fetchOrders]);
+  }, [authToken, dispatch]);
 
-  // ================= UPDATE =================
-  const updateOrderStatus = async (id, status) => {
-    try {
-      setUpdating(true);
-
-      const res = await fetch(
-        API_ENDPOINTS.ADMIN_UPDATE_ORDER_STATUS(id),
-        {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${authToken}`,
-          },
-          body: JSON.stringify({ orderStatus: status }),
-        }
-      );
-
-      const data = await res.json();
-
-      if (res.ok && data.success) {
-        setOrders((prev) =>
-          prev.map((o) =>
-            o._id === id ? { ...o, orderStatus: status } : o
-          )
-        );
-        setDetailsModalVisible(false);
-        Alert.alert('Success', 'Order status updated');
-      } else {
-        Alert.alert('Error', data.error);
-      }
-    } catch (err) {
-      console.log(err);
-      Alert.alert('Error', 'Failed to update order');
-    } finally {
-      setUpdating(false);
+  // ================= HANDLE SUCCESS =================
+  useEffect(() => {
+    if (success) {
+      Alert.alert('Success', 'Order status updated');
+      setDetailsModalVisible(false);
+      dispatch(clearSuccess());
     }
+  }, [success, dispatch]);
+
+  // ================= HANDLE ERROR =================
+  useEffect(() => {
+    if (error) {
+      Alert.alert('Error', error);
+    }
+  }, [error]);
+
+  // ================= REFRESH =================
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    if (authToken) {
+      await dispatch(fetchOrders(authToken));
+    }
+    setIsRefreshing(false);
+  }, [authToken, dispatch]);
+
+  // ================= UPDATE ORDER STATUS =================
+  const handleUpdateOrderStatus = (id, status) => {
+    dispatch(
+      updateOrderStatus({
+        orderId: id,
+        status: status,
+        authToken: authToken,
+      })
+    );
   };
 
   // ================= FILTER & SORT =================
@@ -202,15 +157,14 @@ const AdminOrders = ({ navigation }) => {
       ? orders
       : orders.filter((o) => o.orderStatus === filterStatus);
 
-  // Sort by date
   const sorted = [...filtered].sort((a, b) => {
     const dateA = new Date(a.createdAt);
     const dateB = new Date(b.createdAt);
-    
+
     if (sortOrder === 'newest') {
-      return dateB - dateA; // Newest first
+      return dateB - dateA;
     } else {
-      return dateA - dateB; // Oldest first
+      return dateA - dateB;
     }
   });
 
@@ -243,8 +197,8 @@ const AdminOrders = ({ navigation }) => {
         scrollEnabled={!isMenuOpen}
         refreshControl={
           <RefreshControl
-            refreshing={refreshing}
-            onRefresh={fetchOrders}
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
             tintColor="#B76E79"
           />
         }
@@ -497,7 +451,7 @@ const AdminOrders = ({ navigation }) => {
             {/* USER INFORMATION */}
             <View style={styles.userInfoSection}>
               <Text style={styles.sectionTitle}>Customer Information</Text>
-              
+
               <View style={styles.infoRowNew}>
                 <Text style={styles.infoLabel}>Name:</Text>
                 <Text style={styles.infoValue}>
@@ -559,21 +513,20 @@ const AdminOrders = ({ navigation }) => {
                 <Pressable
                   style={styles.dropdownBtn}
                   onPress={() => {
-                    // Get available next statuses based on current status
                     const statusOptions = [];
-                    
+
                     if (selectedOrder?.orderStatus === 'pending') {
                       statusOptions.push({
                         text: 'Shipped',
-                        onPress: () => updateOrderStatus(selectedOrder._id, 'shipped'),
+                        onPress: () => handleUpdateOrderStatus(selectedOrder._id, 'shipped'),
                       });
                     } else if (selectedOrder?.orderStatus === 'shipped') {
                       statusOptions.push({
                         text: 'Delivered',
-                        onPress: () => updateOrderStatus(selectedOrder._id, 'delivered'),
+                        onPress: () => handleUpdateOrderStatus(selectedOrder._id, 'delivered'),
                       });
                     }
-                    
+
                     statusOptions.push({
                       text: 'Cancel',
                       style: 'cancel',

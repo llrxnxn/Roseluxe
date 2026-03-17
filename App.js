@@ -2,6 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Provider } from 'react-redux';
+import store from './app/redux/store';
+
 import HomeScreen from './app/screens/HomeScreen';
 import ProductScreen from './app/screens/ProductScreen';
 import LoginScreen from './app/screens/auth/LoginScreen';
@@ -24,7 +27,7 @@ import AdminUsers from './app/screens/admin/AdminUsers';
 
 const Stack = createNativeStackNavigator();
 
-export default function App() {
+function RootNavigator() {
   const [initialRoute, setInitialRoute] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -94,5 +97,13 @@ export default function App() {
         <Stack.Screen name="AdminCategories" component={AdminCategories} options={{ presentation: 'card' }}/>
       </Stack.Navigator>
     </NavigationContainer>
+  );
+}
+
+export default function App() {
+  return (
+    <Provider store={store}>
+      <RootNavigator />
+    </Provider>
   );
 }
