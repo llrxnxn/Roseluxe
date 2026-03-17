@@ -18,10 +18,9 @@ import {
 import { Button, Text } from "react-native-paper";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import axios from "axios";
-import { API_ENDPOINTS } from "../config/api";
 import { useFocusEffect } from "@react-navigation/native";
 import Navigation from "./components/navigation";
+import LocalCartManager from "../utils/LocalCartManager"; // ← NEW
 
 const { width } = Dimensions.get("window");
 
@@ -35,16 +34,13 @@ const CartScreen = ({ navigation }) => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userImage, setUserImage] = useState(null);
 
-
-  // Use useFocusEffect to reload cart when screen is focused
+  // ✅ Use useFocusEffect to reload cart every time screen is focused
   useFocusEffect(
     useCallback(() => {
       loadUserAndCart();
       checkLoginStatus();
     }, [])
   );
-
-
 
   const loadUserAndCart = async () => {
     try {
@@ -67,67 +63,37 @@ const CartScreen = ({ navigation }) => {
       console.log("Loaded user:", parsedUser);
       setUser(parsedUser);
 
-      const userId = parsedUser._id || parsedUser.id;
-      if (!userId) {
-        console.log("No user ID found");
-        setCart([]);
-        setSelectedItems(new Set());
-        setSelectAll(false);
-        setCartCount(0);
-        setIsLoading(false);
-        return;
-      }
-
-      fetchCart(userId, token);
+      //Fetch cart from AsyncStorage (LocalCartManager)
+      fetchCartFromLocalStorage();
     } catch (error) {
       console.log("Error loading user/cart:", error);
       setIsLoading(false);
     }
   };
 
-  const fetchCart = async (userId, token) => {
+  // Fetch cart from LocalCartManager instead of API
+  const fetchCartFromLocalStorage = async () => {
     try {
-      console.log(`Fetching cart for user: ${userId}`);
+      console.log("Fetching cart from AsyncStorage...");
 
-      const response = await axios.get(`${API_ENDPOINTS.CART}/${userId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
+      const cartData = await LocalCartManager.getCart();
 
-      console.log("Cart API Response:", response.data);
+      console.log("Cart from AsyncStorage:", cartData);
 
-      if (response.data.success && response.data.data) {
-        const cartData = Array.isArray(response.data.data)
-          ? response.data.data
-          : response.data.data.items || [];
-
-        console.log("Cart items:", cartData);
-        setCart(cartData);
-        setCartCount(cartData.reduce((t, i) => t + i.quantity, 0));
+      if (cartData && cartData.items) {
+        setCart(cartData.items);
+        setCartCount(cartData.items.reduce((t, i) => t + i.quantity, 0));
         setSelectedItems(new Set());
         setSelectAll(false);
       } else {
-        console.log("No cart data received");
         setCart([]);
         setSelectedItems(new Set());
         setSelectAll(false);
         setCartCount(0);
       }
     } catch (error) {
-      console.log("Error fetching cart:");
-      console.log("Status:", error.response?.status);
-      console.log("Data:", error.response?.data);
-      console.log("Message:", error.message);
-
-      if (error.response?.status === 401) {
-        Alert.alert("Session Expired", "Please login again");
-        navigation.navigate("Login");
-      } else {
-        Alert.alert("Error", "Failed to load cart. Please try again.");
-      }
-
+      console.log("Error fetching cart from local storage:", error);
+      Alert.alert("Error", "Failed to load cart. Please try again.");
       setCart([]);
       setSelectedItems(new Set());
       setSelectAll(false);
@@ -137,22 +103,21 @@ const CartScreen = ({ navigation }) => {
     }
   };
 
-  // Add after fetchCart function:
-const checkLoginStatus = async () => {
-  try {
-    const user = await AsyncStorage.getItem("user");
-    setIsLoggedIn(!!user);
-    if (user) {
-      const parsedUser = JSON.parse(user);
-      if (parsedUser.picture) {
-        setUserImage(parsedUser.picture);
+  const checkLoginStatus = async () => {
+    try {
+      const user = await AsyncStorage.getItem("user");
+      setIsLoggedIn(!!user);
+      if (user) {
+        const parsedUser = JSON.parse(user);
+        if (parsedUser.picture) {
+          setUserImage(parsedUser.picture);
+        }
       }
+    } catch (error) {
+      console.log("Error checking login status:", error);
+      setIsLoggedIn(false);
     }
-  } catch (error) {
-    console.log("Error checking login status:", error);
-    setIsLoggedIn(false);
-  }
-};
+  };
 
   // Toggle individual item selection
   const toggleItemSelection = (productId) => {
@@ -183,60 +148,37 @@ const checkLoginStatus = async () => {
     }
   };
 
+  // Use LocalCartManager instead of axios
   const handleQuantityUpdate = async (productId, newQuantity) => {
-    if (!user || !newQuantity || newQuantity < 1) return;
+    if (!newQuantity || newQuantity < 1) return;
 
     try {
-      const userId = user._id || user.id;
-      const token = await AsyncStorage.getItem("token");
-
       console.log(`Updating quantity for product ${productId} to ${newQuantity}`);
 
-      const response = await axios.put(
-        `${API_ENDPOINTS.CART}/${userId}/${productId}`,
-        { quantity: newQuantity },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const result = await LocalCartManager.updateQuantity(productId, newQuantity);
 
-      console.log("Update response:", response.data);
-
-      if (response.data.success) {
-        const updatedCart = Array.isArray(response.data.data)
-          ? response.data.data
-          : response.data.data.items || [];
-        setCart(updatedCart);
-        setCartCount(updatedCart.reduce((t, i) => t + i.quantity, 0));
+      if (result.success) {
+        setCart(result.cart.items);
+        setCartCount(result.cart.items.reduce((t, i) => t + i.quantity, 0));
       } else {
-        Alert.alert("Error", response.data.error || "Cannot update quantity");
+        Alert.alert("Error", result.message || "Cannot update quantity");
       }
     } catch (error) {
-      console.log("Update quantity error:", error.response?.data || error.message);
+      console.log("Update quantity error:", error.message);
       Alert.alert("Error", "Failed to update quantity");
     }
   };
 
+  // Use LocalCartManager instead of axios
   const handleRemoveItem = async (productId) => {
-    if (!user) return;
-
     try {
-      const userId = user._id || user.id;
-      const token = await AsyncStorage.getItem("token");
-
       console.log(`Removing product ${productId} from cart`);
 
-      const response = await axios.delete(
-        `${API_ENDPOINTS.CART}/${userId}/${productId}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const result = await LocalCartManager.removeFromCart(productId);
 
-      console.log("Remove response:", response.data);
-
-      if (response.data.success) {
-        const updatedCart = Array.isArray(response.data.data)
-          ? response.data.data
-          : response.data.data.items || [];
-        setCart(updatedCart);
-        setCartCount(updatedCart.reduce((t, i) => t + i.quantity, 0));
+      if (result.success) {
+        setCart(result.cart.items);
+        setCartCount(result.cart.items.reduce((t, i) => t + i.quantity, 0));
 
         const newSelected = new Set(selectedItems);
         newSelected.delete(productId);
@@ -244,10 +186,10 @@ const checkLoginStatus = async () => {
 
         Alert.alert("Removed", "Item removed from cart");
       } else {
-        Alert.alert("Error", response.data.error || "Cannot remove item");
+        Alert.alert("Error", result.message || "Cannot remove item");
       }
     } catch (error) {
-      console.log("Remove item error:", error.response?.data || error.message);
+      console.log("Remove item error:", error.message);
       Alert.alert("Error", "Failed to remove item");
     }
   };
@@ -277,8 +219,6 @@ const checkLoginStatus = async () => {
     );
   };
 
-
-
   const handleCheckout = () => {
     if (!user) {
       Alert.alert(
@@ -297,7 +237,7 @@ const checkLoginStatus = async () => {
       return;
     }
 
-    // Navigate to CheckoutScreen instead of modal
+    // Navigate to CheckoutScreen with selected items
     navigation.navigate("Checkout", {
       selectedItems,
       cartItems: cart,
@@ -502,8 +442,6 @@ const checkLoginStatus = async () => {
           </View>
         )}
       </SafeAreaView>
-
-
 
       {/* NAVIGATION COMPONENT */}
       <Navigation
@@ -791,181 +729,6 @@ const styles = StyleSheet.create({
     marginTop: 12,
     color: "#999",
     fontSize: 14,
-  },
-
-  // ===== MODAL STYLES =====
-  modalContainer: {
-    flex: 1,
-    backgroundColor: "#FFF5F7",
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    backgroundColor: "white",
-    borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
-  },
-  modalBackBtn: {
-    padding: 8,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#333",
-    flex: 1,
-    textAlign: "center",
-  },
-  modalContent: {
-    padding: 16,
-    paddingBottom: 100,
-  },
-  stepTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#333",
-    marginBottom: 16,
-  },
-
-  // Modal Item Card
-  modalItemCard: {
-    flexDirection: "row",
-    backgroundColor: "white",
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 12,
-    alignItems: "center",
-    gap: 12,
-  },
-  modalItemImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
-  },
-  modalItemInfo: {
-    flex: 1,
-  },
-  modalItemName: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#333",
-  },
-  modalItemQty: {
-    fontSize: 12,
-    color: "#999",
-    marginTop: 4,
-  },
-  modalItemPrice: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#B76E79",
-  },
-
-  modalSummary: {
-    backgroundColor: "white",
-    borderRadius: 10,
-    padding: 16,
-    marginTop: 12,
-  },
-
-  // Text Inputs
-  textInput: {
-    backgroundColor: "white",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#ddd",
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    marginBottom: 12,
-    fontSize: 14,
-    color: "#333",
-  },
-  rowInputs: {
-    flexDirection: "row",
-  },
-
-  // Payment Method
-  paymentMethodContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 20,
-    gap: 10,
-  },
-  paymentMethodBtn: {
-    flex: 1,
-    backgroundColor: "white",
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: "#ddd",
-    paddingVertical: 16,
-    alignItems: "center",
-    gap: 8,
-  },
-  paymentMethodBtnActive: {
-    borderColor: "#B76E79",
-    backgroundColor: "#FFF5F7",
-  },
-  paymentMethodLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#999",
-    textAlign: "center",
-  },
-  paymentMethodLabelActive: {
-    color: "#B76E79",
-  },
-
-  paymentInfo: {
-    backgroundColor: "#FFF5F7",
-    borderRadius: 8,
-    padding: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 12,
-  },
-  paymentInfoText: {
-    fontSize: 12,
-    color: "#B76E79",
-    flex: 1,
-  },
-
-  // Confirm Section
-  confirmCard: {
-    backgroundColor: "white",
-    borderRadius: 10,
-    padding: 16,
-    marginBottom: 12,
-  },
-  confirmLabel: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#333",
-    marginBottom: 8,
-  },
-  confirmValue: {
-    fontSize: 13,
-    color: "#666",
-    marginBottom: 4,
-  },
-
-  // Modal Footer
-  modalFooter: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: "white",
-    borderTopWidth: 1,
-    borderTopColor: "#f0f0f0",
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-  },
-  nextBtn: {
-    backgroundColor: "#B76E79",
-    paddingVertical: 8,
   },
 });
 

@@ -18,6 +18,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useFocusEffect } from "@react-navigation/native";
 import { API_ENDPOINTS } from "../config/api";
+import LocalCartManager from "../utils/LocalCartManager"; // ← NEW IMPORT
 import HeaderScreen from "./components/HeaderScreen";
 import Navigation from "./components/navigation";
 
@@ -55,7 +56,6 @@ const ProductScreen = ({ navigation }) => {
   
   // Cart & Wishlist
   const [wishlist, setWishlist] = useState([]);
-  const [cart, setCart] = useState([]);
   const [cartCount, setCartCount] = useState(0);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   
@@ -63,6 +63,7 @@ const ProductScreen = ({ navigation }) => {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [showProductModal, setShowProductModal] = useState(false);
   const [quantity, setQuantity] = useState(1);
+  const [isAddingToCart, setIsAddingToCart] = useState(false); // ← NEW
   
   // Profile image
   const [userImage, setUserImage] = useState(null);
@@ -113,27 +114,15 @@ const ProductScreen = ({ navigation }) => {
   };
 
   // ================================
-  // FETCH CART FROM DB
+  // GET CART COUNT FROM LOCAL STORAGE ✅ NEW
   // ================================
-  const fetchCart = async () => {
+  const getCartCount = async () => {
     try {
-      const token = await AsyncStorage.getItem("token");
-      const userData = await AsyncStorage.getItem("user");
-      if (!token || !userData) {
-        setCartCount(0);
-        return;
-      }
-
-      const user = JSON.parse(userData);
-      const res = await axios.get(`${API_ENDPOINTS.CART}/${user.id || user._id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      const cartItems = res.data.items || res.data.data?.items || [];
-      setCart(cartItems);
-      setCartCount(cartItems.reduce((t, i) => t + i.quantity, 0));
+      const count = await LocalCartManager.getCartCount();
+      setCartCount(count);
     } catch (error) {
-      console.log("Fetch cart error:", error.response?.data || error);
+      console.log("Get cart count error:", error);
+      setCartCount(0);
     }
   };
 
@@ -170,7 +159,7 @@ const ProductScreen = ({ navigation }) => {
   useEffect(() => {
     fetchCategories();
     checkLoginStatus();
-    fetchCart();
+    getCartCount(); // ← Changed from fetchCart
     loadWishlist();
   }, []);
 
@@ -181,7 +170,7 @@ const ProductScreen = ({ navigation }) => {
   useFocusEffect(
     useCallback(() => {
       checkLoginStatus();
-      fetchCart();
+      getCartCount(); // ← Changed from fetchCart
     }, [])
   );
 
@@ -199,38 +188,51 @@ const ProductScreen = ({ navigation }) => {
   };
 
   // ================================
-  // ADD TO CART
+  // ADD TO CART ✅ UPDATED TO USE LocalCartManager
   // ================================
   const handleAddToCart = async () => {
     try {
       if (!selectedProduct) return;
 
-      const token = await AsyncStorage.getItem("token");
+      // Check if user is logged in
       const userData = await AsyncStorage.getItem("user");
-      if (!token || !userData) {
-        Alert.alert("Login Required");
+      if (!userData) {
+        Alert.alert("Login Required", "Please login to add items to cart");
+        setShowProductModal(false);
         navigation.navigate("Login");
         return;
       }
 
-      const user = JSON.parse(userData);
-      await axios.post(
-        `${API_ENDPOINTS.CART}/${user.id || user._id}`,
-        { productId: selectedProduct._id, quantity },
-        { headers: { Authorization: `Bearer ${token}` } }
+      setIsAddingToCart(true);
+
+      // ✅ Use LocalCartManager instead of API call
+      const result = await LocalCartManager.addToCart(
+        selectedProduct._id,
+        {
+          productName: selectedProduct.name,
+          price: selectedProduct.price,
+          image: selectedProduct.images?.[0] || "",
+        },
+        quantity
       );
 
-      await fetchCart();
-      setShowProductModal(false);
-      setQuantity(1);
+      if (result.success) {
+        // ✅ Update cart count from local storage
+        await getCartCount();
+        
+        // Close modal and reset
+        setShowProductModal(false);
+        setQuantity(1);
 
-      Alert.alert("Success", "Item added to cart");
-    } catch (error) {
-      if (error.response?.status === 401) {
-        Alert.alert("Session Expired", "Please login again");
-        navigation.navigate("Login");
+        Alert.alert("Added to Cart", `${selectedProduct.name} added successfully`);
+      } else {
+        Alert.alert("Error", result.message || "Failed to add to cart");
       }
-      console.log("Add to cart error:", error.response?.data || error);
+    } catch (error) {
+      console.log("Add to cart error:", error);
+      Alert.alert("Error", "Failed to add to cart");
+    } finally {
+      setIsAddingToCart(false);
     }
   };
 
@@ -434,15 +436,28 @@ const ProductScreen = ({ navigation }) => {
           {/* Add to Cart */}
           <View style={styles.modalFooter}>
             <TouchableOpacity
-              style={styles.addToCartBtn}
+              style={[
+                styles.addToCartBtn,
+                isAddingToCart && styles.addToCartBtnDisabled
+              ]}
               onPress={handleAddToCart}
+              disabled={isAddingToCart}
             >
-              <MaterialCommunityIcons
-                name="cart-plus"
-                size={24}
-                color="#fff"
-              />
-              <Text style={styles.addToCartText}>Add to Cart</Text>
+              {isAddingToCart ? (
+                <>
+                  <ActivityIndicator size="small" color="#fff" />
+                  <Text style={styles.addToCartText}>Adding...</Text>
+                </>
+              ) : (
+                <>
+                  <MaterialCommunityIcons
+                    name="cart-plus"
+                    size={24}
+                    color="#fff"
+                  />
+                  <Text style={styles.addToCartText}>Add to Cart</Text>
+                </>
+              )}
             </TouchableOpacity>
           </View>
         </SafeAreaView>
@@ -975,6 +990,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
+    gap: 8,
     shadowColor: "#B76E79",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
@@ -982,10 +998,14 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
 
+  addToCartBtnDisabled: {
+    backgroundColor: "#ccc",
+    shadowOpacity: 0,
+  },
+
   addToCartText: {
     color: "#fff",
     fontSize: 16,
     fontWeight: "700",
-    marginLeft: 8,
   },
 });

@@ -18,6 +18,7 @@ import axios from "axios";
 import { API_ENDPOINTS } from "../config/api";
 import { useFocusEffect } from "@react-navigation/native";
 import Navigation from "./components/navigation";
+import LocalCartManager from "../utils/LocalCartManager"; // ← NEW
 
 const CheckoutScreen = ({ route, navigation }) => {
   const { selectedItems } = route.params || {};
@@ -103,7 +104,7 @@ const CheckoutScreen = ({ route, navigation }) => {
 
   const getShippingFee = () => 36;
 
-  // Quantity updates
+  // Quantity updates (local only, doesn't affect cart in storage)
   const updateQuantity = (productId, newQty) => {
     if (newQty < 1) return;
     const updated = cartItems.map(item =>
@@ -125,6 +126,7 @@ const CheckoutScreen = ({ route, navigation }) => {
   const tax = subtotal * 0.12;
   const total = subtotal + tax + shippingFee;
 
+  // ✅ UPDATED: Main checkout handler with cart cleanup
   const handlePlaceOrder = async () => {
     if (!userInfo.fullName || !userInfo.phone || !userInfo.address) {
       Alert.alert("Error", "Please fill in all shipping details");
@@ -153,43 +155,44 @@ const CheckoutScreen = ({ route, navigation }) => {
         shippingInfo: { ...userInfo, country: "Philippines" },
         paymentMethod,
         totals: {
-            subtotal,       // your subtotal calculation
-            tax,            // your tax calculation
-            shippingFee,    // shipping fee
-            totalAmount: total, // total including tax & shipping
+          subtotal,
+          tax,
+          shippingFee,
+          totalAmount: total,
         },
-        };
+      };
 
+      // ✅ CREATE ORDER (backend)
       const response = await axios.post(API_ENDPOINTS.ORDERS, orderData, {
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       });
 
       if (response.data.success) {
-        // REMOVE ORDERED ITEMS FROM CART
-        for (const item of orderItems) {
-            try {
-            await axios.delete(
-                `${API_ENDPOINTS.CART}/${userId}/${item.productId}`,
-                {
-                headers: { Authorization: `Bearer ${token}` },
-                }
-            );
-            } catch (err) {
-            console.log("Failed to remove item from cart:", err);
-            }
-        }
+        console.log("[Checkout] Order placed successfully:", response.data.data.orderId);
+
+        // ✅ IMPORTANT: Delete ordered items from AsyncStorage cart
+        const productIdsToDelete = orderItems.map(item => item.productId);
+        
+        const deleteResult = await LocalCartManager.deleteCartAfterCheckout(
+          productIdsToDelete
+        );
+
+        console.log("[Checkout] Cart cleanup result:", deleteResult);
 
         Alert.alert(
-            "Order Placed!",
-            `Order ID: ${response.data.data.orderId}\nTotal: ₱${total.toFixed(2)}`,
-            [
+          "Order Placed! ✅",
+          `Order ID: ${response.data.data.orderId}\nTotal: ₱${total.toFixed(2)}`,
+          [
             {
-                text: "View Orders",
-                onPress: () => navigation.replace("Orders"),
+              text: "View Orders",
+              onPress: () => {
+                // Navigate to Orders screen - this will reload cart automatically via useFocusEffect
+                navigation.replace("Orders");
+              },
             },
-            ]
+          ]
         );
-        } else {
+      } else {
         Alert.alert("Error", response.data.error || "Failed to place order");
       }
     } catch (error) {
@@ -347,8 +350,9 @@ const CheckoutScreen = ({ route, navigation }) => {
                     <Text style={styles.paymentBadgeText}>COD</Text>
                   </View>
                 )}
-                {paymentMethod === "gcash" && (<MaterialCommunityIcons name="wallet" size={24} color="#B76E79" style={styles.paymentMethodIcon} />
-)}
+                {paymentMethod === "gcash" && (
+                  <MaterialCommunityIcons name="wallet" size={24} color="#B76E79" style={styles.paymentMethodIcon} />
+                )}
                 <View>
                   <Text style={styles.paymentMethodName}>
                     {paymentOptions.find(p => p.id === paymentMethod)?.label}

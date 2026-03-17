@@ -1,5 +1,4 @@
 const Order = require("../models/Order");
-const Cart = require("../models/Cart");
 
 // CREATE ORDER
 exports.createOrder = async (req, res) => {
@@ -52,17 +51,9 @@ exports.createOrder = async (req, res) => {
 
     await order.save();
 
-    // remove ordered items from cart
-    await Cart.updateOne(
-      { userId },
-      {
-        $pull: {
-          items: {
-            productId: { $in: items.map((i) => i.productId) },
-          },
-        },
-      }
-    );
+    // ✅ REMOVED: Cart cleanup code
+    // Cart is now managed locally on mobile app using LocalCartManager.deleteCartAfterCheckout()
+    // Backend no longer handles cart cleanup
 
     res.status(201).json({
       success: true,
