@@ -236,13 +236,19 @@ const Navigation = ({
               <DrawerMenuItem
                 icon="account-circle"
                 label="My Profile"
-                onPress={() => handleDrawerNavigation('profile')}
+                onPress={() => handleDrawerNavigation('Profile')}
               />
 
               <DrawerMenuItem
                 icon="package"
                 label="My Orders"
                 onPress={() => handleDrawerNavigation('Orders')}
+              />
+
+              <DrawerMenuItem
+                icon="star"
+                label="To Review"
+                onPress={() => handleDrawerNavigation('Review')}
               />
             </>
           )}

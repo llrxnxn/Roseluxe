@@ -16,6 +16,8 @@ import OrdersScreen from './app/screens/OrderScreen';
 import CartScreen from './app/screens/CartScreen';
 import WishlistScreen from './app/screens/WishlistScreen';
 import CheckoutScreen from './app/screens/CheckoutScreen';
+import ReviewScreen from './app/screens/ReviewScreen';
+import ReviewFormScreen from './app/screens/ReviewFormScreen';
 
 import AdminDashboard from './app/screens/admin/AdminDashboard';
 import AdminProducts from './app/screens/admin/AdminProduct';
@@ -48,12 +50,12 @@ function RootNavigator() {
             console.log('Customer detected - setting initial route to Home');
           }
         } else {
-          setInitialRoute('Login');
-          console.log('No user found - setting initial route to Login');
+          setInitialRoute('Home');
+          console.log('No user found - setting initial route to Home');
         }
       } catch (error) {
         console.log('Error checking user role:', error);
-        setInitialRoute('Login');
+        setInitialRoute('Home');
       } finally {
         setIsLoading(false);
       }
@@ -86,6 +88,8 @@ function RootNavigator() {
         <Stack.Screen name="Wishlist" component={WishlistScreen} />
         <Stack.Screen name="Checkout" component={CheckoutScreen} />
         <Stack.Screen name="Orders" component={OrdersScreen} />
+        <Stack.Screen name="Review" component={ReviewScreen} />
+        <Stack.Screen name="ReviewForm" component={ReviewFormScreen} />
 
         {/* Admin Screens */}
         <Stack.Screen name="AdminDashboard" component={AdminDashboard} />

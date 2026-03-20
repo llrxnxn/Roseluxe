@@ -4,6 +4,7 @@ const cors = require('cors');
 const cloudinary = require('cloudinary').v2;
 require('dotenv').config();
 const orderRoutes = require("./routes/orderRoutes");
+const reviewRoutes = require("./routes/reviewRoutes");
 const app = express();
 
 /* ===========================
@@ -42,6 +43,7 @@ app.use('/api/products', require('./routes/productRoutes'));
 app.use('/api/categories', require('./routes/categoryRoutes'));
 app.use('/api/users', require('./routes/userRoutes'));
 app.use("/api/orders", orderRoutes);
+app.use("/api/reviews", reviewRoutes);
 /* ===========================
    TEST ROUTE
 =========================== */
