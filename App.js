@@ -19,11 +19,11 @@ import CheckoutScreen from './app/screens/CheckoutScreen';
 
 import AdminDashboard from './app/screens/admin/AdminDashboard';
 import AdminProducts from './app/screens/admin/AdminProduct';
-import AdminOrders from './app/screens/admin/AdminOrders';
 import AdminCategories from './app/screens/admin/AdminCategories';
 import AdminReviews from './app/screens/admin/AdminReviews';
 import AdminAddProduct from './app/screens/admin/AdminAddProducts';
 import AdminUsers from './app/screens/admin/AdminUsers';
+import AdminOrders from './app/screens/admin/AdminOrder';
 
 const Stack = createNativeStackNavigator();
 
