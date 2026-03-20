@@ -152,9 +152,9 @@ exports.createReview = async (req, res) => {
 
     await review.save();
 
-    // Populate review data before sending response
+    // ✅ FIXED: Populate user data properly with fullName field
     await review.populate([
-      { path: 'userId', select: 'firstName lastName' },
+      { path: 'userId', select: 'fullName email' },
       { path: 'productId', select: 'productName productImage' },
       { path: 'orderId', select: 'orderId orderDate' },
     ]);
@@ -211,7 +211,7 @@ exports.createReview = async (req, res) => {
 /**
  * GET ALL REVIEWS FOR A PRODUCT
  * GET /api/reviews/product/:productId
- * ✅ Fixed: Properly uses mongoose.Types.ObjectId for aggregation
+ * ✅ FIXED: Properly populates fullName and email fields
  */
 exports.getProductReviews = async (req, res) => {
   try {
@@ -229,7 +229,7 @@ exports.getProductReviews = async (req, res) => {
     }
 
     const reviews = await Review.find({ productId })
-      .populate('userId', 'firstName lastName')
+      .populate('userId', 'fullName email') // ← ✅ FIXED: Select fullName field
       .populate('productId', 'productName')
       .sort(sort)
       .skip(skip)
@@ -252,6 +252,16 @@ exports.getProductReviews = async (req, res) => {
         },
       },
     ]);
+
+    console.log('Reviews populated:', {
+      count: reviews.length,
+      firstReview: reviews[0] ? {
+        id: reviews[0]._id,
+        userId: reviews[0].userId,
+        userName: reviews[0].userId?.fullName,
+        userEmail: reviews[0].userId?.email,
+      } : null,
+    });
 
     res.status(200).json({
       success: true,
@@ -281,7 +291,7 @@ exports.getProductReviews = async (req, res) => {
  * GET USER'S REVIEWS
  * GET /api/reviews/user/my-reviews
  * Returns all reviews created by the authenticated user
- * ✅ VERIFIED: Correct implementation
+ * ✅ FIXED: Properly populates fullName field
  */
 exports.getUserReviews = async (req, res) => {
   try {
@@ -295,6 +305,7 @@ exports.getUserReviews = async (req, res) => {
     }
 
     const reviews = await Review.find({ userId })
+      .populate('userId', 'fullName email') // ← ✅ FIXED: Select fullName field
       .populate('productId', 'productName productImage')
       .populate('orderId', 'orderId orderDate')
       .sort('-createdAt');
@@ -318,7 +329,7 @@ exports.getUserReviews = async (req, res) => {
 /**
  * GET SINGLE REVIEW BY ID
  * GET /api/reviews/:reviewId
- * ✅ VERIFIED: Correct implementation
+ * ✅ FIXED: Properly populates fullName field
  */
 exports.getReviewById = async (req, res) => {
   try {
@@ -333,7 +344,7 @@ exports.getReviewById = async (req, res) => {
     }
 
     const review = await Review.findById(reviewId)
-      .populate('userId', 'firstName lastName email')
+      .populate('userId', 'fullName email') // ← ✅ FIXED: Select fullName field
       .populate('productId', 'productName')
       .populate('orderId', 'orderId orderDate');
 
@@ -471,9 +482,9 @@ exports.updateReview = async (req, res) => {
 
     await review.save();
 
-    // Populate before sending response
+    // ✅ FIXED: Populate with fullName field
     await review.populate([
-      { path: 'userId', select: 'firstName lastName' },
+      { path: 'userId', select: 'fullName email' },
       { path: 'productId', select: 'productName' },
     ]);
 
@@ -563,7 +574,7 @@ exports.deleteReview = async (req, res) => {
 /**
  * ADMIN - GET ALL REVIEWS
  * GET /api/reviews/admin/all-reviews
- * ✅ VERIFIED: Correct implementation
+ * ✅ FIXED: Properly populates fullName field
  */
 exports.adminGetAllReviews = async (req, res) => {
   try {
@@ -571,8 +582,9 @@ exports.adminGetAllReviews = async (req, res) => {
 
     const skip = (page - 1) * limit;
 
+    // ✅ FIXED: Populate user data with fullName field
     const reviews = await Review.find()
-      .populate('userId', 'firstName lastName email')
+      .populate('userId', 'fullName email') // ← ✅ FIXED: Select fullName field
       .populate('productId', 'productName')
       .populate('orderId', 'orderId')
       .sort(sort)

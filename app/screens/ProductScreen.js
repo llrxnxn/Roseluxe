@@ -18,9 +18,10 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useFocusEffect } from "@react-navigation/native";
 import { API_ENDPOINTS } from "../config/api";
-import LocalCartManager from "../utils/LocalCartManager"; // ← NEW IMPORT
+import LocalCartManager from "../utils/LocalCartManager";
 import HeaderScreen from "./components/HeaderScreen";
 import Navigation from "./components/navigation";
+import ReviewSection from "./components/ReviewSectionScreen";
 
 const { width } = Dimensions.get("window");
 const PRODUCT_CARD_WIDTH = (width - 40) / 2;
@@ -63,7 +64,7 @@ const ProductScreen = ({ navigation }) => {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [showProductModal, setShowProductModal] = useState(false);
   const [quantity, setQuantity] = useState(1);
-  const [isAddingToCart, setIsAddingToCart] = useState(false); // ← NEW
+  const [isAddingToCart, setIsAddingToCart] = useState(false);
   
   // Profile image
   const [userImage, setUserImage] = useState(null);
@@ -114,7 +115,7 @@ const ProductScreen = ({ navigation }) => {
   };
 
   // ================================
-  // GET CART COUNT FROM LOCAL STORAGE ✅ NEW
+  // GET CART COUNT FROM LOCAL STORAGE
   // ================================
   const getCartCount = async () => {
     try {
@@ -159,7 +160,7 @@ const ProductScreen = ({ navigation }) => {
   useEffect(() => {
     fetchCategories();
     checkLoginStatus();
-    getCartCount(); // ← Changed from fetchCart
+    getCartCount();
     loadWishlist();
   }, []);
 
@@ -170,7 +171,7 @@ const ProductScreen = ({ navigation }) => {
   useFocusEffect(
     useCallback(() => {
       checkLoginStatus();
-      getCartCount(); // ← Changed from fetchCart
+      getCartCount();
     }, [])
   );
 
@@ -188,7 +189,7 @@ const ProductScreen = ({ navigation }) => {
   };
 
   // ================================
-  // ADD TO CART ✅ UPDATED TO USE LocalCartManager
+  // ADD TO CART
   // ================================
   const handleAddToCart = async () => {
     try {
@@ -205,7 +206,6 @@ const ProductScreen = ({ navigation }) => {
 
       setIsAddingToCart(true);
 
-      // ✅ Use LocalCartManager instead of API call
       const result = await LocalCartManager.addToCart(
         selectedProduct._id,
         {
@@ -217,10 +217,8 @@ const ProductScreen = ({ navigation }) => {
       );
 
       if (result.success) {
-        // ✅ Update cart count from local storage
         await getCartCount();
         
-        // Close modal and reset
         setShowProductModal(false);
         setQuantity(1);
 
@@ -424,12 +422,13 @@ const ProductScreen = ({ navigation }) => {
                 </View>
               </View>
 
-              <View style={styles.totalSection}>
-                <Text style={styles.totalLabel}>Total Price</Text>
-                <Text style={styles.totalPrice}>
-                  ₱{(selectedProduct.price * quantity).toLocaleString()}
-                </Text>
-              </View>
+
+                    
+              {/* ✅ NEW: ReviewSection Component */}
+              <ReviewSection
+                productId={selectedProduct._id}
+                navigation={navigation}
+              />
             </View>
           </ScrollView>
 
@@ -646,10 +645,7 @@ const ProductScreen = ({ navigation }) => {
 
 export default ProductScreen;
 
-// =============================
-// STYLES
-// =============================
-
+// All styles remain the same as before...
 const styles = StyleSheet.create({
   /* FILTER SECTION */
   filterSection: {
@@ -949,7 +945,7 @@ const styles = StyleSheet.create({
 
   totalSection: {
     marginTop: 16,
-    paddingBottom: 120,
+    paddingBottom: 20,
   },
 
   totalLabel: {
