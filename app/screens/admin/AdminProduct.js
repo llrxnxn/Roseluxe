@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -16,21 +16,40 @@ import {
 import { Text } from 'react-native-paper';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { API_ENDPOINTS } from '../../config/api';
+import { useDispatch, useSelector } from 'react-redux';
+import {
+  fetchProducts,
+  deleteProduct,
+  bulkDeleteProducts,
+  setSearchQuery,
+  toggleItemSelection,
+  toggleSelectAll,
+  setSelectionMode,
+  clearSelection,
+  setSelectedProduct,
+  setCurrentImageIndex,
+  clearSelectedProduct,
+  clearError,
+  setRefreshing,
+} from '../../redux/slices/productSlice';
 import AdminHeader from './AdminHeader';
 
 export default function AdminProducts({ navigation }) {
-  const [products, setProducts] = useState([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filteredProducts, setFilteredProducts] = useState([]);
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState(null);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [selectedItems, setSelectedItems] = useState([]);
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const [selectionMode, setSelectionMode] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
+  const dispatch = useDispatch();
+
+  // Redux selectors
+  const {
+    items: products,
+    filteredItems: filteredProducts,
+    loading,
+    refreshing,
+    error,
+    searchQuery,
+    selectedItems,
+    selectionMode,
+    selectedProduct,
+    currentImageIndex,
+  } = useSelector((state) => state.products);
 
   // Menu items configuration
   const menuItems = [
@@ -91,108 +110,22 @@ export default function AdminProducts({ navigation }) {
   ];
 
   useEffect(() => {
-    fetchProducts();
-  }, []);
+    dispatch(fetchProducts());
+  }, [dispatch]);
 
+  // Handle errors
   useEffect(() => {
-    filterProducts();
-  }, [searchQuery, products]);
-
-  /* ================= FETCH PRODUCTS ================= */
-  const fetchProducts = async () => {
-    try {
-      setLoading(true);
-
-      console.log('🟦 FETCHING PRODUCTS FROM:', API_ENDPOINTS.PRODUCTS);
-
-      const response = await fetch(API_ENDPOINTS.PRODUCTS);
-
-      console.log('🟦 RESPONSE STATUS:', response.status);
-      console.log('🟦 RESPONSE OK:', response.ok);
-
-      const data = await response.json();
-
-      console.log('🟦 RESPONSE DATA:', JSON.stringify(data, null, 2));
-
-      if (!response.ok) {
-        console.error('❌ RESPONSE NOT OK:', data.message);
-        throw new Error(data.message || 'Failed to fetch');
-      }
-
-      if (data.success && data.products) {
-        console.log('✅ PRODUCTS LOADED:', data.products.length, 'items');
-
-        setProducts(data.products);
-      } else {
-        console.warn('⚠️ UNEXPECTED RESPONSE FORMAT:', data);
-        Alert.alert('Warning', 'Unexpected response format from server');
-      }
-    } catch (error) {
-      console.error('❌ FETCH ERROR:', error.message);
-      console.error('❌ FULL ERROR:', error);
-      Alert.alert('Error', 'Unable to load products: ' + error.message);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
+    if (error) {
+      Alert.alert('Error', error);
+      dispatch(clearError());
     }
-  };
+  }, [error, dispatch]);
 
   /* ================= REFRESH PRODUCTS ================= */
   const onRefresh = async () => {
-    setRefreshing(true);
-    setSelectedItems([]);
-    setSelectionMode(false);
-    await fetchProducts();
-  };
-
-  /* ================= FILTER ================= */
-  const filterProducts = () => {
-    console.log('🔍 FILTERING:', {
-      searchQuery,
-      totalProducts: products.length,
-      searchTrim: searchQuery.trim(),
-    });
-
-    if (!searchQuery.trim()) {
-      setFilteredProducts(products);
-      console.log('🔍 NO SEARCH - showing all:', products.length);
-      return;
-    }
-
-    const query = searchQuery.toLowerCase();
-
-    const filtered = products.filter((product) => {
-      const categoryName =
-        typeof product.category === 'object'
-          ? product.category?.name
-          : product.category;
-
-      return (
-        product.name?.toLowerCase().includes(query) ||
-        categoryName?.toLowerCase().includes(query)
-      );
-    });
-
-    console.log('🔍 FILTERED RESULTS:', filtered.length);
-    setFilteredProducts(filtered);
-  };
-
-  /* ================= TOGGLE SELECTION ================= */
-  const toggleItemSelection = (productId) => {
-    setSelectedItems((prev) =>
-      prev.includes(productId)
-        ? prev.filter((id) => id !== productId)
-        : [...prev, productId]
-    );
-  };
-
-  /* ================= SELECT ALL ================= */
-  const toggleSelectAll = () => {
-    if (selectedItems.length === filteredProducts.length) {
-      setSelectedItems([]);
-    } else {
-      setSelectedItems(filteredProducts.map((p) => p._id));
-    }
+    dispatch(setRefreshing(true));
+    dispatch(clearSelection());
+    dispatch(fetchProducts());
   };
 
   /* ================= BULK DELETE ================= */
@@ -211,35 +144,9 @@ export default function AdminProducts({ navigation }) {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            try {
-              setLoading(true);
-
-              const response = await fetch(
-                `${API_ENDPOINTS.PRODUCTS}/bulk-delete`,
-                {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ productIds: selectedItems }),
-                }
-              );
-
-              const data = await response.json();
-
-              if (!response.ok) {
-                throw new Error(data.message);
-              }
-
-              if (data.success) {
-                setSelectedItems([]);
-                setSelectionMode(false);
-                Alert.alert('Success', `${data.deletedCount} product(s) deleted`);
-                fetchProducts();
-              }
-            } catch (error) {
-              console.log('Bulk delete error:', error);
-              Alert.alert('Error', 'Failed to delete products');
-            } finally {
-              setLoading(false);
+            const result = await dispatch(bulkDeleteProducts(selectedItems));
+            if (bulkDeleteProducts.fulfilled.match(result)) {
+              Alert.alert('Success', `${result.payload.deletedCount} product(s) deleted`);
             }
           },
         },
@@ -255,30 +162,9 @@ export default function AdminProducts({ navigation }) {
         text: 'Delete',
         style: 'destructive',
         onPress: async () => {
-          try {
-            setLoading(true);
-
-            const response = await fetch(
-              `${API_ENDPOINTS.PRODUCTS}/${productId}`,
-              { method: 'DELETE' }
-            );
-
-            const data = await response.json();
-
-            if (!response.ok) {
-              throw new Error(data.message);
-            }
-
-            if (data.success) {
-              setModalVisible(false);
-              Alert.alert('Success', 'Product deleted successfully');
-              fetchProducts();
-            }
-          } catch (error) {
-            console.log('Delete error:', error);
-            Alert.alert('Error', 'Failed to delete product');
-          } finally {
-            setLoading(false);
+          const result = await dispatch(deleteProduct(productId));
+          if (deleteProduct.fulfilled.match(result)) {
+            Alert.alert('Success', 'Product deleted successfully');
           }
         },
       },
@@ -287,7 +173,7 @@ export default function AdminProducts({ navigation }) {
 
   /* ================= EDIT PRODUCT ================= */
   const handleEditProduct = (product) => {
-    setModalVisible(false);
+    dispatch(clearSelectedProduct());
     navigation.navigate('AdminAddProduct', { product });
   };
 
@@ -310,7 +196,7 @@ export default function AdminProducts({ navigation }) {
       <SafeAreaView style={styles.container}>
         <AdminHeader
           menuItems={menuItems}
-          onMenuPress={(isOpen) => setIsMenuOpen(isOpen)}
+          onMenuPress={() => {}}
         />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#B76E79" />
@@ -324,13 +210,12 @@ export default function AdminProducts({ navigation }) {
     <SafeAreaView style={styles.container}>
       <AdminHeader
         menuItems={menuItems}
-        onMenuPress={(isOpen) => setIsMenuOpen(isOpen)}
+        onMenuPress={() => {}}
       />
 
       <ScrollView
         style={styles.content}
         showsVerticalScrollIndicator={false}
-        scrollEnabled={!isMenuOpen}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -348,14 +233,6 @@ export default function AdminProducts({ navigation }) {
             </Text>
           </View>
           <View style={styles.headerButtons}>
-            {/* ✅ REFRESH BUTTON */}
-            <TouchableOpacity
-              style={styles.refreshButton}
-              onPress={onRefresh}
-              disabled={refreshing}
-            >
-              <MaterialCommunityIcons name="refresh" size={20} color="#666" />
-            </TouchableOpacity>
 
             {/* ADD BUTTON */}
             <TouchableOpacity
@@ -372,7 +249,7 @@ export default function AdminProducts({ navigation }) {
           style={styles.searchInput}
           placeholder="Search by name or category..."
           value={searchQuery}
-          onChangeText={setSearchQuery}
+          onChangeText={(text) => dispatch(setSearchQuery(text))}
           placeholderTextColor="#999"
         />
 
@@ -381,7 +258,7 @@ export default function AdminProducts({ navigation }) {
           <View style={styles.selectionBar}>
             <TouchableOpacity
               style={styles.selectAllBtn}
-              onPress={toggleSelectAll}
+              onPress={() => dispatch(toggleSelectAll())}
             >
               <MaterialCommunityIcons
                 name={
@@ -399,10 +276,7 @@ export default function AdminProducts({ navigation }) {
 
             <TouchableOpacity
               style={styles.cancelSelectionBtn}
-              onPress={() => {
-                setSelectionMode(false);
-                setSelectedItems([]);
-              }}
+              onPress={() => dispatch(clearSelection())}
             >
               <Text style={styles.cancelText}>Cancel</Text>
             </TouchableOpacity>
@@ -439,9 +313,9 @@ export default function AdminProducts({ navigation }) {
                 style={styles.checkbox}
                 onPress={() => {
                   if (!selectionMode) {
-                    setSelectionMode(true);
+                    dispatch(setSelectionMode(true));
                   }
-                  toggleItemSelection(product._id);
+                  dispatch(toggleItemSelection(product._id));
                 }}
               >
                 <MaterialCommunityIcons
@@ -462,17 +336,15 @@ export default function AdminProducts({ navigation }) {
                 ]}
                 onPress={() => {
                   if (selectionMode) {
-                    toggleItemSelection(product._id);
+                    dispatch(toggleItemSelection(product._id));
                   } else {
-                    setSelectedProduct(product);
-                    setCurrentImageIndex(0);
-                    setModalVisible(true);
+                    dispatch(setSelectedProduct(product));
                   }
                 }}
                 onLongPress={() => {
                   if (!selectionMode) {
-                    setSelectionMode(true);
-                    toggleItemSelection(product._id);
+                    dispatch(setSelectionMode(true));
+                    dispatch(toggleItemSelection(product._id));
                   }
                 }}
               >
@@ -514,9 +386,9 @@ export default function AdminProducts({ navigation }) {
 
       {/* ================= PRODUCT DETAIL MODAL ================= */}
       <Modal
-        visible={modalVisible}
+        visible={selectedProduct !== null}
         animationType="slide"
-        onRequestClose={() => setModalVisible(false)}
+        onRequestClose={() => dispatch(clearSelectedProduct())}
       >
         <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
           {selectedProduct && (
@@ -538,10 +410,11 @@ export default function AdminProducts({ navigation }) {
                         <TouchableOpacity
                           style={[styles.navButton, styles.prevButton]}
                           onPress={() =>
-                            setCurrentImageIndex(
-                              (prev) =>
-                                (prev - 1 + selectedProduct.images.length) %
+                            dispatch(
+                              setCurrentImageIndex(
+                                (currentImageIndex - 1 + selectedProduct.images.length) %
                                 selectedProduct.images.length
+                              )
                             )
                           }
                         >
@@ -555,9 +428,10 @@ export default function AdminProducts({ navigation }) {
                         <TouchableOpacity
                           style={[styles.navButton, styles.nextButton]}
                           onPress={() =>
-                            setCurrentImageIndex(
-                              (prev) =>
-                                (prev + 1) % selectedProduct.images.length
+                            dispatch(
+                              setCurrentImageIndex(
+                                (currentImageIndex + 1) % selectedProduct.images.length
+                              )
                             )
                           }
                         >
@@ -589,7 +463,7 @@ export default function AdminProducts({ navigation }) {
 
                 <TouchableOpacity
                   style={styles.modalCloseBtn}
-                  onPress={() => setModalVisible(false)}
+                  onPress={() => dispatch(clearSelectedProduct())}
                 >
                   <MaterialCommunityIcons name="close" size={28} color="#fff" />
                 </TouchableOpacity>
@@ -641,7 +515,7 @@ export default function AdminProducts({ navigation }) {
                       keyExtractor={(_, index) => index.toString()}
                       renderItem={({ item, index }) => (
                         <TouchableOpacity
-                          onPress={() => setCurrentImageIndex(index)}
+                          onPress={() => dispatch(setCurrentImageIndex(index))}
                         >
                           <Image
                             source={{ uri: item }}
@@ -676,7 +550,7 @@ export default function AdminProducts({ navigation }) {
                   <TouchableOpacity
                     style={styles.deleteBtn}
                     onPress={() => {
-                      setModalVisible(false);
+                      dispatch(clearSelectedProduct());
                       handleDeleteProduct(selectedProduct._id);
                     }}
                   >
@@ -691,7 +565,7 @@ export default function AdminProducts({ navigation }) {
 
                 <TouchableOpacity
                   style={styles.closeModalBtn}
-                  onPress={() => setModalVisible(false)}
+                  onPress={() => dispatch(clearSelectedProduct())}
                 >
                   <Text style={styles.closeModalText}>Close</Text>
                 </TouchableOpacity>
