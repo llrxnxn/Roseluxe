@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -10,11 +10,52 @@ import {
   Modal,
   Image,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import * as ImagePicker from 'expo-image-picker';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { API_ENDPOINTS } from '../../config/api';
+
+// ===== MEMOIZED INPUT FIELD COMPONENT (PREVENTS RE-RENDER) =====
+const InputField = React.memo(({
+  label,
+  field,
+  placeholder,
+  multiline = false,
+  keyboardType = 'default',
+  value,
+  error,
+  loading,
+  onChange,
+  onFocus,
+}) => (
+  <View style={styles.inputGroup}>
+    <Text style={styles.label}>{label}</Text>
+    <TextInput
+      style={[
+        styles.input,
+        multiline && { height: 80, textAlignVertical: 'top' },
+        error && styles.inputError,
+      ]}
+      placeholder={placeholder}
+      value={value}
+      onChangeText={onChange}
+      onFocus={onFocus}
+      multiline={multiline}
+      keyboardType={keyboardType}
+      editable={!loading}
+      placeholderTextColor="#999"
+      scrollEnabled={multiline}
+    />
+    {error && (
+      <Text style={styles.errorText}>{error}</Text>
+    )}
+  </View>
+));
+
+InputField.displayName = 'InputField';
 
 export default function AdminAddProduct({ navigation, route }) {
   const isEditing = !!route?.params?.product;
@@ -122,12 +163,10 @@ export default function AdminAddProduct({ navigation, route }) {
   };
 
   /* ================= DETECT IMAGE MIME TYPE ================= */
-  const detectImageMimeType = (uri) => {
-    // Extract file extension from URI
+  const detectImageMimeType = useCallback((uri) => {
     const uriParts = uri.split('.');
     const fileExtension = uriParts[uriParts.length - 1].toLowerCase();
 
-    // Map extensions to MIME types
     const mimeTypeMap = {
       jpg: 'image/jpeg',
       jpeg: 'image/jpeg',
@@ -141,11 +180,11 @@ export default function AdminAddProduct({ navigation, route }) {
       heic: 'image/heic',
     };
 
-    return mimeTypeMap[fileExtension] || 'image/jpeg'; // Default to JPEG
-  };
+    return mimeTypeMap[fileExtension] || 'image/jpeg';
+  }, []);
 
   /* ================= GET FILE EXTENSION FROM MIME TYPE ================= */
-  const getFileExtensionFromMimeType = (mimeType) => {
+  const getFileExtensionFromMimeType = useCallback((mimeType) => {
     const extensionMap = {
       'image/jpeg': 'jpg',
       'image/png': 'png',
@@ -159,7 +198,7 @@ export default function AdminAddProduct({ navigation, route }) {
     };
 
     return extensionMap[mimeType] || 'jpg';
-  };
+  }, []);
 
   /* ================= TAKE PHOTO WITH CAMERA ================= */
   const takePhoto = async () => {
@@ -229,19 +268,19 @@ export default function AdminAddProduct({ navigation, route }) {
   };
 
   /* ================= REMOVE IMAGE ================= */
-  const removeImage = (index, isNew) => {
+  const removeImage = useCallback((index, isNew) => {
     if (isNew) {
-      setSelectedImages(selectedImages.filter((_, i) => i !== index));
+      setSelectedImages(prev => prev.filter((_, i) => i !== index));
     } else {
       setFormData((prev) => ({
         ...prev,
         images: prev.images.filter((_, i) => i !== index),
       }));
     }
-  };
+  }, []);
 
   /* ================= SELECT CATEGORY ================= */
-  const selectCategory = (categoryId) => {
+  const selectCategory = useCallback((categoryId) => {
     console.log('Category selected:', categoryId);
 
     setFormData((prev) => ({
@@ -252,19 +291,16 @@ export default function AdminAddProduct({ navigation, route }) {
     setCategoryModalVisible(false);
 
     // Clear category error if exists
-    if (clientErrors.category) {
-      setClientErrors((prev) => ({
-        ...prev,
-        category: '',
-      }));
-    }
-  };
+    setClientErrors((prev) => ({
+      ...prev,
+      category: '',
+    }));
+  }, []);
 
   /* ================= CLIENT-SIDE VALIDATION (UI ONLY) ================= */
-  const validateFormUI = () => {
+  const validateFormUI = useCallback(() => {
     const errors = {};
 
-    // Basic client-side checks for UX
     if (!formData.name.trim()) {
       errors.name = 'Product name is required';
     }
@@ -281,7 +317,6 @@ export default function AdminAddProduct({ navigation, route }) {
       errors.category = 'Category is required';
     }
 
-    // Image validation
     const totalImages = formData.images.length + selectedImages.length;
     if (totalImages === 0) {
       errors.images = 'At least one image is required';
@@ -289,11 +324,10 @@ export default function AdminAddProduct({ navigation, route }) {
 
     setClientErrors(errors);
     return Object.keys(errors).length === 0;
-  };
+  }, [formData, selectedImages]);
 
   /* ================= SUBMIT FORM ================= */
   const handleSubmit = async () => {
-    // UI validation first
     if (!validateFormUI()) {
       Alert.alert('Validation Error', 'Please fill all required fields');
       return;
@@ -301,9 +335,8 @@ export default function AdminAddProduct({ navigation, route }) {
 
     try {
       setLoading(true);
-      setClientErrors({}); // Clear previous errors
+      setClientErrors({});
 
-      // Prepare FormData
       const formDataObj = new FormData();
       formDataObj.append('name', formData.name.trim());
       formDataObj.append('description', formData.description.trim());
@@ -311,7 +344,6 @@ export default function AdminAddProduct({ navigation, route }) {
       formDataObj.append('stock', formData.stock || '0');
       formDataObj.append('category', formData.category);
 
-      // Add only new images with correct MIME type
       selectedImages.forEach((img, index) => {
         const fileExtension = getFileExtensionFromMimeType(img.mimeType);
         formDataObj.append('images', {
@@ -341,9 +373,7 @@ export default function AdminAddProduct({ navigation, route }) {
 
       const data = await response.json();
 
-      // Handle server validation errors
       if (!response.ok) {
-        // If backend returns field-specific errors
         if (data.errors && typeof data.errors === 'object') {
           setClientErrors(data.errors);
           Alert.alert('Validation Error', 'Please fix the errors below');
@@ -374,52 +404,22 @@ export default function AdminAddProduct({ navigation, route }) {
   };
 
   /* ================= INPUT HANDLER ================= */
-  const handleInputChange = (field, value) => {
+  const handleInputChange = useCallback((field, value) => {
     setFormData((prev) => ({
       ...prev,
       [field]: value,
     }));
+  }, []);
 
-    // Clear error on input change
-    if (clientErrors[field]) {
-      setClientErrors((prev) => ({
-        ...prev,
-        [field]: '',
-      }));
-    }
-  };
+  /* ================= CLEAR ERROR ON FOCUS ================= */
+  const handleInputFocus = useCallback((field) => {
+    setClientErrors((prev) => ({
+      ...prev,
+      [field]: '',
+    }));
+  }, []);
 
-  /* ================= INPUT FIELD COMPONENT ================= */
-  const InputField = ({
-    label,
-    field,
-    placeholder,
-    multiline = false,
-    keyboardType = 'default',
-  }) => (
-    <View style={styles.inputGroup}>
-      <Text style={styles.label}>{label}</Text>
-      <TextInput
-        style={[
-          styles.input,
-          multiline && { height: 80, textAlignVertical: 'top' },
-          clientErrors[field] && styles.inputError,
-        ]}
-        placeholder={placeholder}
-        value={formData[field]}
-        onChangeText={(value) => handleInputChange(field, value)}
-        multiline={multiline}
-        keyboardType={keyboardType}
-        editable={!loading}
-        placeholderTextColor="#999"
-      />
-      {clientErrors[field] && (
-        <Text style={styles.errorText}>{clientErrors[field]}</Text>
-      )}
-    </View>
-  );
-
-  /* ================= IMAGE PICKER MODAL ================= */
+  /* ================= IMAGE PICKER MODAL COMPONENT ================= */
   const ImagePickerModal = () => (
     <Modal
       visible={imagePickerModalVisible}
@@ -443,7 +443,6 @@ export default function AdminAddProduct({ navigation, route }) {
           </View>
 
           <View style={styles.pickerOptionsContainer}>
-            {/* TAKE PHOTO OPTION */}
             <TouchableOpacity
               style={styles.pickerOption}
               onPress={takePhoto}
@@ -463,7 +462,6 @@ export default function AdminAddProduct({ navigation, route }) {
               </View>
             </TouchableOpacity>
 
-            {/* UPLOAD FROM LIBRARY OPTION */}
             <TouchableOpacity
               style={styles.pickerOption}
               onPress={pickImageFromLibrary}
@@ -495,7 +493,7 @@ export default function AdminAddProduct({ navigation, route }) {
     </Modal>
   );
 
-  /* ================= LOADING ================= */
+  /* ================= LOADING STATE ================= */
   if (loadingCategories) {
     return (
       <SafeAreaView style={styles.container}>
@@ -509,187 +507,215 @@ export default function AdminAddProduct({ navigation, route }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* ========== HEADER ========== */}
-        <View style={styles.header}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={0}
+      >
+        <ScrollView 
+          style={styles.content} 
+          showsVerticalScrollIndicator={false}
+          scrollEnabled={true}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ paddingBottom: 20 }}
+        >
+          {/* ========== HEADER ========== */}
+          <View style={styles.header}>
+            <TouchableOpacity
+              onPress={() => navigation.goBack()}
+              disabled={loading}
+            >
+              <MaterialCommunityIcons
+                name="arrow-left"
+                size={28}
+                color="#B76E79"
+              />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>
+              {isEditing ? 'Edit Product' : 'Add New Product'}
+            </Text>
+            <View style={{ width: 28 }} />
+          </View>
+
+          {/* ========== PRODUCT IMAGES ========== */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Product Images</Text>
+
+            <View style={styles.imageGrid}>
+              {formData.images.map((image, index) => (
+                <View key={`existing-${index}`} style={styles.imageContainer}>
+                  <Image
+                    source={{ uri: image }}
+                    style={styles.imagePreview}
+                  />
+                  <TouchableOpacity
+                    style={styles.removeImageBtn}
+                    onPress={() => removeImage(index, false)}
+                  >
+                    <MaterialCommunityIcons
+                      name="close-circle"
+                      size={24}
+                      color="#ff4444"
+                    />
+                  </TouchableOpacity>
+                </View>
+              ))}
+
+              {selectedImages.map((image, index) => (
+                <View key={`new-${index}`} style={styles.imageContainer}>
+                  <Image
+                    source={{ uri: image.uri }}
+                    style={styles.imagePreview}
+                  />
+                  <TouchableOpacity
+                    style={styles.removeImageBtn}
+                    onPress={() => removeImage(index, true)}
+                  >
+                    <MaterialCommunityIcons
+                      name="close-circle"
+                      size={24}
+                      color="#ff4444"
+                    />
+                  </TouchableOpacity>
+                </View>
+              ))}
+
+              <TouchableOpacity
+                style={styles.addImageBtn}
+                onPress={() => setImagePickerModalVisible(true)}
+                disabled={loading}
+              >
+                <MaterialCommunityIcons
+                  name="plus"
+                  size={32}
+                  color="#B76E79"
+                />
+                <Text style={styles.addImageBtnText}>Add Image</Text>
+              </TouchableOpacity>
+            </View>
+
+            {clientErrors.images && (
+              <Text style={styles.errorText}>{clientErrors.images}</Text>
+            )}
+          </View>
+
+          {/* ========== PRODUCT INFO ========== */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Product Information</Text>
+
+            <InputField
+              label="Product Name *"
+              field="name"
+              placeholder="e.g., Red Rose Bouquet"
+              value={formData.name}
+              error={clientErrors.name}
+              loading={loading}
+              onChange={(value) => handleInputChange('name', value)}
+              onFocus={() => handleInputFocus('name')}
+            />
+
+            <InputField
+              label="Description *"
+              field="description"
+              placeholder="Describe the product..."
+              multiline
+              value={formData.description}
+              error={clientErrors.description}
+              loading={loading}
+              onChange={(value) => handleInputChange('description', value)}
+              onFocus={() => handleInputFocus('description')}
+            />
+
+            <InputField
+              label="Price *"
+              field="price"
+              placeholder="0.00"
+              keyboardType="decimal-pad"
+              value={formData.price}
+              error={clientErrors.price}
+              loading={loading}
+              onChange={(value) => handleInputChange('price', value)}
+              onFocus={() => handleInputFocus('price')}
+            />
+
+            <InputField
+              label="Stock"
+              field="stock"
+              placeholder="0"
+              keyboardType="number-pad"
+              value={formData.stock}
+              error={clientErrors.stock}
+              loading={loading}
+              onChange={(value) => handleInputChange('stock', value)}
+              onFocus={() => handleInputFocus('stock')}
+            />
+
+            {/* Category Selection */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Category *</Text>
+              <TouchableOpacity
+                style={[
+                  styles.categoryButton,
+                  clientErrors.category && styles.inputError,
+                ]}
+                onPress={() => setCategoryModalVisible(true)}
+                disabled={loading}
+              >
+                <Text
+                  style={[
+                    styles.categoryButtonText,
+                    !formData.category && styles.categoryButtonPlaceholder,
+                  ]}
+                >
+                  {formData.category
+                    ? categories.find((c) => c._id === formData.category)
+                        ?.name || 'Select Category'
+                    : 'Select Category'}
+                </Text>
+                <MaterialCommunityIcons
+                  name="chevron-down"
+                  size={20}
+                  color="#B76E79"
+                />
+              </TouchableOpacity>
+              {clientErrors.category && (
+                <Text style={styles.errorText}>{clientErrors.category}</Text>
+              )}
+            </View>
+          </View>
+
+          {/* ========== SUBMIT BUTTON ========== */}
           <TouchableOpacity
+            style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+            onPress={handleSubmit}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <>
+                <MaterialCommunityIcons
+                  name="check-circle"
+                  size={18}
+                  color="#fff"
+                />
+                <Text style={styles.submitButtonText}>
+                  {isEditing ? 'Update Product' : 'Create Product'}
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          {/* ========== CANCEL BUTTON ========== */}
+          <TouchableOpacity
+            style={styles.cancelButton}
             onPress={() => navigation.goBack()}
             disabled={loading}
           >
-            <MaterialCommunityIcons
-              name="arrow-left"
-              size={28}
-              color="#B76E79"
-            />
+            <Text style={styles.cancelButtonText}>Cancel</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>
-            {isEditing ? 'Edit Product' : 'Add New Product'}
-          </Text>
-          <View style={{ width: 28 }} />
-        </View>
-
-        {/* ========== PRODUCT IMAGES ========== */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Product Images</Text>
-
-          {/* Image Grid */}
-          <View style={styles.imageGrid}>
-            {/* Existing Images */}
-            {formData.images.map((image, index) => (
-              <View key={`existing-${index}`} style={styles.imageContainer}>
-                <Image
-                  source={{ uri: image }}
-                  style={styles.imagePreview}
-                />
-                <TouchableOpacity
-                  style={styles.removeImageBtn}
-                  onPress={() => removeImage(index, false)}
-                >
-                  <MaterialCommunityIcons
-                    name="close-circle"
-                    size={24}
-                    color="#ff4444"
-                  />
-                </TouchableOpacity>
-              </View>
-            ))}
-
-            {/* New Images */}
-            {selectedImages.map((image, index) => (
-              <View key={`new-${index}`} style={styles.imageContainer}>
-                <Image
-                  source={{ uri: image.uri }}
-                  style={styles.imagePreview}
-                />
-                <TouchableOpacity
-                  style={styles.removeImageBtn}
-                  onPress={() => removeImage(index, true)}
-                >
-                  <MaterialCommunityIcons
-                    name="close-circle"
-                    size={24}
-                    color="#ff4444"
-                  />
-                </TouchableOpacity>
-              </View>
-            ))}
-
-            {/* Add Image Button - Opens Modal */}
-            <TouchableOpacity
-              style={styles.addImageBtn}
-              onPress={() => setImagePickerModalVisible(true)}
-              disabled={loading}
-            >
-              <MaterialCommunityIcons
-                name="plus"
-                size={32}
-                color="#B76E79"
-              />
-              <Text style={styles.addImageBtnText}>Add Image</Text>
-            </TouchableOpacity>
-          </View>
-
-          {clientErrors.images && (
-            <Text style={styles.errorText}>{clientErrors.images}</Text>
-          )}
-        </View>
-
-        {/* ========== PRODUCT INFO ========== */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Product Information</Text>
-
-          <InputField
-            label="Product Name *"
-            field="name"
-            placeholder="e.g., Red Rose Bouquet"
-          />
-
-          <InputField
-            label="Description *"
-            field="description"
-            placeholder="Describe the product..."
-            multiline
-          />
-
-          <InputField
-            label="Price *"
-            field="price"
-            placeholder="0.00"
-            keyboardType="decimal-pad"
-          />
-
-          <InputField
-            label="Stock"
-            field="stock"
-            placeholder="0"
-            keyboardType="number-pad"
-          />
-
-          {/* Category Selection */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Category *</Text>
-            <TouchableOpacity
-              style={[
-                styles.categoryButton,
-                clientErrors.category && styles.inputError,
-              ]}
-              onPress={() => setCategoryModalVisible(true)}
-              disabled={loading}
-            >
-              <Text
-                style={[
-                  styles.categoryButtonText,
-                  !formData.category && styles.categoryButtonPlaceholder,
-                ]}
-              >
-                {formData.category
-                  ? categories.find((c) => c._id === formData.category)
-                      ?.name || 'Select Category'
-                  : 'Select Category'}
-              </Text>
-              <MaterialCommunityIcons
-                name="chevron-down"
-                size={20}
-                color="#B76E79"
-              />
-            </TouchableOpacity>
-            {clientErrors.category && (
-              <Text style={styles.errorText}>{clientErrors.category}</Text>
-            )}
-          </View>
-        </View>
-
-        {/* ========== SUBMIT BUTTON ========== */}
-        <TouchableOpacity
-          style={[styles.submitButton, loading && styles.submitButtonDisabled]}
-          onPress={handleSubmit}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <>
-              <MaterialCommunityIcons
-                name="check-circle"
-                size={18}
-                color="#fff"
-              />
-              <Text style={styles.submitButtonText}>
-                {isEditing ? 'Update Product' : 'Create Product'}
-              </Text>
-            </>
-          )}
-        </TouchableOpacity>
-
-        {/* ========== CANCEL BUTTON ========== */}
-        <TouchableOpacity
-          style={styles.cancelButton}
-          onPress={() => navigation.goBack()}
-          disabled={loading}
-        >
-          <Text style={styles.cancelButtonText}>Cancel</Text>
-        </TouchableOpacity>
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* ================= CATEGORY MODAL ================= */}
       <Modal
