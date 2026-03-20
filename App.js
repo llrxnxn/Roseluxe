@@ -34,7 +34,7 @@ function RootNavigator() {
   useEffect(() => {
     const checkUserRole = async () => {
       try {
-        const token = await AsyncStorage.getItem('authToken');
+        const token = await AsyncStorage.getItem('token');
         const user = await AsyncStorage.getItem('user');
 
         if (token && user) {

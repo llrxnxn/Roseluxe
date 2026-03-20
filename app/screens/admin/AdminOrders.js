@@ -17,7 +17,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 // Redux imports
 import { useDispatch, useSelector } from 'react-redux';
-import { fetchOrders, updateOrderStatus, clearSuccess } from '../redux/slices/ordersSlice';
+import { fetchOrders, updateOrderStatus, clearSuccess } from '../../redux/slices/ordersSlice';
 import AdminHeader from './AdminHeader';
 
 const AdminOrders = ({ navigation }) => {
@@ -97,7 +97,7 @@ const AdminOrders = ({ navigation }) => {
   // ================= INIT TOKEN =================
   useEffect(() => {
     const init = async () => {
-      const token = await AsyncStorage.getItem('authToken');
+      const token = await AsyncStorage.getItem('token');
       if (!token) {
         Alert.alert('Login required');
         navigation.navigate('Login');

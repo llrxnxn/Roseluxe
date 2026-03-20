@@ -107,7 +107,7 @@ export default function AdminUsers({ navigation }) {
 
   const fetchUsers = async () => {
     try {
-      const token = await AsyncStorage.getItem('authToken');
+      const token = await AsyncStorage.getItem('token');
 
       const response = await fetch(API_ENDPOINTS.USERS, {
         headers: {
@@ -158,7 +158,7 @@ export default function AdminUsers({ navigation }) {
 
   const handleRoleChange = async (newRole) => {
     try {
-      const token = await AsyncStorage.getItem('authToken');
+      const token = await AsyncStorage.getItem('token');
 
       const response = await fetch(
         `${API_ENDPOINTS.USERS}/${selectedUser._id}`,
@@ -190,7 +190,7 @@ export default function AdminUsers({ navigation }) {
 
   const handleStatusChange = async (newStatus) => {
     try {
-      const token = await AsyncStorage.getItem('authToken');
+      const token = await AsyncStorage.getItem('token');
 
       const response = await fetch(
         `${API_ENDPOINTS.USERS}/${selectedUser._id}`,
