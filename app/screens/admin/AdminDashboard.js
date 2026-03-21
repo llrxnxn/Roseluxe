@@ -236,7 +236,7 @@ export default function AdminDashboard({ navigation }) {
 
               <View style={styles.chartsSection}>
                 <View style={styles.chartCard}>
-                  <Text style={styles.chartTitle}>📊 Orders Per Month</Text>
+                  <Text style={styles.chartTitle}>Orders Per Month</Text>
                   <LineChart
                     data={lineChartData}
                     width={width - 48}

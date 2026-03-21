@@ -34,7 +34,7 @@ const CartScreen = ({ navigation }) => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userImage, setUserImage] = useState(null);
 
-  // ✅ Use useFocusEffect to reload cart every time screen is focused
+  // Use useFocusEffect to reload cart every time screen is focused
   useFocusEffect(
     useCallback(() => {
       loadUserAndCart();

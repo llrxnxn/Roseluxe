@@ -422,9 +422,6 @@ const ProductScreen = ({ navigation }) => {
                 </View>
               </View>
 
-
-                    
-              {/* ✅ NEW: ReviewSection Component */}
               <ReviewSection
                 productId={selectedProduct._id}
                 navigation={navigation}

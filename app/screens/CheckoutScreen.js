@@ -126,7 +126,7 @@ const CheckoutScreen = ({ route, navigation }) => {
   const tax = subtotal * 0.12;
   const total = subtotal + tax + shippingFee;
 
-  // ✅ UPDATED: Main checkout handler with cart cleanup
+  // Main checkout handler with cart cleanup
   const handlePlaceOrder = async () => {
     if (!userInfo.fullName || !userInfo.phone || !userInfo.address) {
       Alert.alert("Error", "Please fill in all shipping details");
@@ -162,7 +162,7 @@ const CheckoutScreen = ({ route, navigation }) => {
         },
       };
 
-      // ✅ CREATE ORDER (backend)
+      // CREATE ORDER ON BACKEND
       const response = await axios.post(API_ENDPOINTS.ORDERS, orderData, {
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       });
@@ -170,7 +170,7 @@ const CheckoutScreen = ({ route, navigation }) => {
       if (response.data.success) {
         console.log("[Checkout] Order placed successfully:", response.data.data.orderId);
 
-        // ✅ IMPORTANT: Delete ordered items from AsyncStorage cart
+        //Delete ordered items from AsyncStorage cart
         const productIdsToDelete = orderItems.map(item => item.productId);
         
         const deleteResult = await LocalCartManager.deleteCartAfterCheckout(
@@ -180,7 +180,7 @@ const CheckoutScreen = ({ route, navigation }) => {
         console.log("[Checkout] Cart cleanup result:", deleteResult);
 
         Alert.alert(
-          "Order Placed! ✅",
+          "Order Placed!",
           `Order ID: ${response.data.data.orderId}\nTotal: ₱${total.toFixed(2)}`,
           [
             {

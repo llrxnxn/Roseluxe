@@ -6,27 +6,27 @@ export const fetchProducts = createAsyncThunk(
   'products/fetchProducts',
   async (_, { rejectWithValue }) => {
     try {
-      console.log('🟦 FETCHING PRODUCTS FROM:', API_ENDPOINTS.PRODUCTS);
+      console.log('FETCHING PRODUCTS FROM:', API_ENDPOINTS.PRODUCTS);
       const response = await fetch(API_ENDPOINTS.PRODUCTS);
-      console.log('🟦 RESPONSE STATUS:', response.status);
+      console.log('RESPONSE STATUS:', response.status);
 
       const data = await response.json();
-      console.log('🟦 RESPONSE DATA:', JSON.stringify(data, null, 2));
+      console.log('RESPONSE DATA:', JSON.stringify(data, null, 2));
 
       if (!response.ok) {
-        console.error('❌ RESPONSE NOT OK:', data.message);
+        console.error('RESPONSE NOT OK:', data.message);
         return rejectWithValue(data.message || 'Failed to fetch products');
       }
 
       if (data.success && data.products) {
-        console.log('✅ PRODUCTS LOADED:', data.products.length, 'items');
+        console.log('PRODUCTS LOADED:', data.products.length, 'items');
         return data.products;
       } else {
-        console.warn('⚠️ UNEXPECTED RESPONSE FORMAT:', data);
+        console.warn('UNEXPECTED RESPONSE FORMAT:', data);
         return rejectWithValue('Unexpected response format from server');
       }
     } catch (error) {
-      console.error('❌ FETCH ERROR:', error.message);
+      console.error('FETCH ERROR:', error.message);
       return rejectWithValue(error.message);
     }
   }

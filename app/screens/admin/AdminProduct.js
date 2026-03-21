@@ -308,7 +308,6 @@ export default function AdminProducts({ navigation }) {
         ) : (
           filteredProducts.map((product) => (
             <View key={product._id} style={styles.cardWrapper}>
-              {/* ✅ CHECKBOX BEFORE IMAGE */}
               <TouchableOpacity
                 style={styles.checkbox}
                 onPress={() => {
