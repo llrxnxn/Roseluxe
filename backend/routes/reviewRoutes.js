@@ -9,10 +9,11 @@ const {
   deleteReview,
   adminGetAllReviews,
   adminDeleteReview,
+  markHelpful,
 } = require('../controllers/reviewController');
 
 const upload = require('../middleware/upload');
-const { authenticateToken } = require('../middleware/auth'); // ✅ FIXED IMPORT
+const { authenticateToken } = require('../middleware/auth'); // FIXED IMPORT
 
 // Admin routes
 router.get('/admin/all-reviews', authenticateToken, adminGetAllReviews);
@@ -26,6 +27,7 @@ router.get('/product/:productId', getProductReviews);
 
 // CRUD
 router.post('/', authenticateToken, upload.array('images', 5), createReview);
+router.put('/:reviewId/helpful', authenticateToken,markHelpful);
 router.put('/:reviewId', authenticateToken, upload.array('images', 5), updateReview);
 router.delete('/:reviewId', authenticateToken, deleteReview);
 

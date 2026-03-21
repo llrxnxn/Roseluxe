@@ -14,11 +14,11 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 
-// ✅ Import API config
+
 import { API_ENDPOINTS } from '../config/api';
 
 const ReviewFormScreen = ({ route, navigation }) => {
-  // ✅ FIXED: Extract product data directly from route params
+  
   const { orderId, productId, productName, product } = route.params;
 
   const [rating, setRating] = useState(0);
@@ -27,19 +27,19 @@ const ReviewFormScreen = ({ route, navigation }) => {
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // ✅ FIXED: Use product data directly from params (already parsed in ReviewScreen)
+  
   const [displayProduct, setDisplayProduct] = useState(null);
 
   useEffect(() => {
     // Validate that we have product data
     if (!product || !product.productId) {
-      console.error('❌ Missing product data:', product);
+      console.error('Missing product data:', product);
       Alert.alert('Error', 'Product information not found');
       navigation.goBack();
       return;
     }
 
-    console.log('✅ Product loaded:', {
+    console.log('Product loaded:', {
       productId: product.productId,
       productName: product.productName,
       price: product.price,
@@ -119,11 +119,11 @@ const ReviewFormScreen = ({ route, navigation }) => {
 
       // =============== PREPARE FORM DATA ===============
 
-      // ✅ FIXED: Use productId directly from route params
+  
       const formData = new FormData();
       formData.append('orderId', orderId);
       formData.append('productId', productId); // Use exact productId from params
-      formData.append('rating', parseInt(rating)); // ✅ FIXED: Convert rating to number explicitly
+      formData.append('rating', parseInt(rating)); // rating to number
       formData.append('comment', comment.trim());
 
       // Add images
@@ -155,23 +155,23 @@ const ReviewFormScreen = ({ route, navigation }) => {
         body: formData,
       });
 
-      console.log('📥 Response status:', response.status);
+      console.log('Response status:', response.status);
 
       if (!response.ok) {
         let errorMessage = 'Failed to create review';
         try {
           const errorData = await response.json();
           errorMessage = errorData.message || errorMessage;
-          console.error('❌ Error response:', errorData);
+          console.error('Error response:', errorData);
         } catch (parseError) {
           const errorText = await response.text();
-          console.error('❌ Error text:', errorText);
+          console.error('Error text:', errorText);
         }
         throw new Error(errorMessage);
       }
 
       const responseData = await response.json();
-      console.log('✅ Review created successfully:', responseData.data._id);
+      console.log('Review created successfully:', responseData.data._id);
 
       Alert.alert('Success', 'Review submitted successfully!', [
         {
@@ -183,7 +183,7 @@ const ReviewFormScreen = ({ route, navigation }) => {
         },
       ]);
     } catch (error) {
-      console.error('❌ Submit review error:', error);
+      console.error('Submit review error:', error);
       
       // Handle specific errors
       if (error.message.includes('already reviewed')) {
@@ -254,7 +254,7 @@ const ReviewFormScreen = ({ route, navigation }) => {
           <Image
             source={{ uri: displayProduct.image }}
             style={styles.productImage}
-            onError={() => console.log('⚠️ Product image failed to load')}
+            onError={() => console.log('Product image failed to load')}
           />
           <View style={styles.productInfo}>
             <Text style={styles.productName} numberOfLines={2}>

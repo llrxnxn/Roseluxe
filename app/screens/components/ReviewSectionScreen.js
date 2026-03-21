@@ -42,14 +42,14 @@ const ReviewSection = ({ productId, navigation }) => {
       setLoading(true);
       const res = await axios.get(`${API_ENDPOINTS.REVIEWS}/product/${productId}`);
 
-      console.log('📥 Reviews Response:', res.data);
+      console.log('Reviews Response:', res.data);
 
       if (res.data.success) {
         const reviewsWithUserData = res.data.data.map((review) => {
           console.log('Review data:', {
             id: review._id,
             userId: review.userId,
-            userName: review.userId?.firstName,
+            userName: review.userId?.fullName,
             userEmail: review.userId?.email,
           });
           return review;
@@ -185,18 +185,49 @@ const ReviewSection = ({ productId, navigation }) => {
   // HELPFUL REACTION
   // ================================
   const handleHelpful = async (reviewId) => {
-    Alert.alert('Thanks!', 'Thank you for marking this review as helpful');
+    try {
+      const token = await AsyncStorage.getItem('token');
+
+      const res = await axios.put(
+        `${API_ENDPOINTS.REVIEWS}/${reviewId}/helpful`,
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (res.data.success) {
+        setReviews((prevReviews) =>
+          prevReviews.map((r) =>
+            r._id === reviewId
+              ? {
+                  ...r,
+                  helpful: res.data.helpful,
+                  isHelpful: res.data.isHelpful,
+                }
+              : r
+          )
+        );
+      }
+    } catch (error) {
+      console.log('Helpful error:', error.response?.data || error);
+    }
   };
 
   // ================================
   // GET USER FULL NAME
   // ================================
   const getUserFullName = (review) => {
-    if (review.userId?.firstName && review.userId?.lastName) {
-      return `${review.userId.firstName} ${review.userId.lastName}`;
+    if (review.userId?.fullName) {
+      return review.userId.fullName;
     }
-    if (review.userId?.firstName) {
-      return review.userId.firstName;
+    if (review.userId?.fullName) {
+      return `${review.userId.fullName}`;
+    }
+    if (review.userId?.fullName) {
+      return review.userId.fullName;
     }
     if (typeof review.userId === 'string') {
       return 'Anonymous User';
@@ -319,15 +350,25 @@ const ReviewSection = ({ productId, navigation }) => {
         {/* Review Footer - Helpful & Verified Badge */}
         <View style={styles.reviewFooter}>
           <TouchableOpacity
-            style={styles.helpfulBtn}
+            style={[
+              styles.helpfulBtn,
+              item.isHelpful && styles.helpfulBtnActive,
+            ]}
             onPress={() => handleHelpful(item._id)}
           >
             <MaterialCommunityIcons
-              name="thumb-up-outline"
-              size={14}
-              color="#999"
+              name={item.isHelpful ? 'thumb-up' : 'thumb-up-outline'}
+              size={16}
+              color={item.isHelpful ? '#fff' : '#999'}
             />
-            <Text style={styles.helpfulText}>Helpful ({item.helpful || 0})</Text>
+            <Text
+              style={[
+                styles.helpfulText,
+                item.isHelpful && styles.helpfulTextActive,
+              ]}
+            >
+              {item.helpful || 0}
+            </Text>
           </TouchableOpacity>
 
           {item.isVerifiedPurchase && (
@@ -697,18 +738,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 6,
-    backgroundColor: '#f9f9f9',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: '#f0f0f0',
     borderWidth: 1,
-    borderColor: '#e8e8e8',
+    borderColor: '#e0e0e0',
+  },
+
+  helpfulBtnActive: {
+    backgroundColor: '#4CAF50',
+    borderColor: '#4CAF50',
   },
 
   helpfulText: {
-    fontSize: 12,
-    color: '#999',
-    fontWeight: '500',
+    fontSize: 13,
+    color: '#666',
+    fontWeight: '600',
+  },
+
+  helpfulTextActive: {
+    color: '#fff',
+    fontWeight: '700',
   },
 
   verifiedBadge: {

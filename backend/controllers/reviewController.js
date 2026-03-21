@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const Review = require('../models/Review');
 const Order = require('../models/Order');
 const cloudinary = require('cloudinary').v2;
+const { filterBadWords } = require('../utils/badWordsFilter');
 
 
 exports.createReview = async (req, res) => {
@@ -26,7 +27,7 @@ exports.createReview = async (req, res) => {
       });
     }
 
-    // ✅ FIXED: Convert rating to number (handles string from FormData)
+
     const ratingNumber = Number(rating);
     
     // Validate rating is a number between 1-5
@@ -51,6 +52,8 @@ exports.createReview = async (req, res) => {
         message: 'Review comment must be 1000 characters or less',
       });
     }
+
+    const filteredComment = filterBadWords(trimmedComment);
 
     // Validate MongoDB ObjectIds format
     if (!mongoose.Types.ObjectId.isValid(orderId)) {
@@ -144,15 +147,14 @@ exports.createReview = async (req, res) => {
       orderId,
       userId,
       productId,
-      rating: ratingNumber, // ✅ Use converted number
-      comment: trimmedComment,
+      rating: ratingNumber, // Use converted number
+      comment: filteredComment, // Use filtered comment
       images,
       isVerifiedPurchase: true,
     });
 
     await review.save();
 
-    // ✅ FIXED: Populate user data properly with fullName field
     await review.populate([
       { path: 'userId', select: 'fullName email' },
       { path: 'productId', select: 'productName productImage' },
@@ -167,9 +169,9 @@ exports.createReview = async (req, res) => {
   } catch (error) {
     // =============== ERROR HANDLING ===============
 
-    // Handle MongoDB duplicate key error (E11000)
+    // Handle MongoDB duplicate key error
     if (error.code === 11000) {
-      console.warn('⚠️ Duplicate review attempt for:', error.keyValue);
+      console.warn('Duplicate review attempt for:', error.keyValue);
       return res.status(400).json({
         success: false,
         message:
@@ -208,11 +210,6 @@ exports.createReview = async (req, res) => {
   }
 };
 
-/**
- * GET ALL REVIEWS FOR A PRODUCT
- * GET /api/reviews/product/:productId
- * ✅ FIXED: Properly populates fullName and email fields
- */
 exports.getProductReviews = async (req, res) => {
   try {
     const { productId } = req.params;
@@ -229,7 +226,7 @@ exports.getProductReviews = async (req, res) => {
     }
 
     const reviews = await Review.find({ productId })
-      .populate('userId', 'fullName email') // ← ✅ FIXED: Select fullName field
+      .populate('userId', 'fullName email') // ← FIXED: Select fullName field
       .populate('productId', 'productName')
       .sort(sort)
       .skip(skip)
@@ -237,8 +234,6 @@ exports.getProductReviews = async (req, res) => {
 
     const total = await Review.countDocuments({ productId });
 
-    // Calculate average rating and stats
-    // ✅ FIXED: Properly convert to ObjectId for aggregation
     const ratingStats = await Review.aggregate([
       { $match: { productId: new mongoose.Types.ObjectId(productId) } },
       {
@@ -287,12 +282,7 @@ exports.getProductReviews = async (req, res) => {
   }
 };
 
-/**
- * GET USER'S REVIEWS
- * GET /api/reviews/user/my-reviews
- * Returns all reviews created by the authenticated user
- * ✅ FIXED: Properly populates fullName field
- */
+
 exports.getUserReviews = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -305,7 +295,7 @@ exports.getUserReviews = async (req, res) => {
     }
 
     const reviews = await Review.find({ userId })
-      .populate('userId', 'fullName email') // ← ✅ FIXED: Select fullName field
+      .populate('userId', 'fullName email') 
       .populate('productId', 'productName productImage')
       .populate('orderId', 'orderId orderDate')
       .sort('-createdAt');
@@ -326,11 +316,7 @@ exports.getUserReviews = async (req, res) => {
   }
 };
 
-/**
- * GET SINGLE REVIEW BY ID
- * GET /api/reviews/:reviewId
- * ✅ FIXED: Properly populates fullName field
- */
+
 exports.getReviewById = async (req, res) => {
   try {
     const { reviewId } = req.params;
@@ -344,7 +330,7 @@ exports.getReviewById = async (req, res) => {
     }
 
     const review = await Review.findById(reviewId)
-      .populate('userId', 'fullName email') // ← ✅ FIXED: Select fullName field
+      .populate('userId', 'fullName email') 
       .populate('productId', 'productName')
       .populate('orderId', 'orderId orderDate');
 
@@ -377,7 +363,6 @@ exports.updateReview = async (req, res) => {
     const { rating, comment } = req.body;
     const userId = req.user.id;
 
-    // Validate reviewId is a valid MongoDB ObjectId
     if (!mongoose.Types.ObjectId.isValid(reviewId)) {
       return res.status(400).json({
         success: false,
@@ -385,13 +370,12 @@ exports.updateReview = async (req, res) => {
       });
     }
 
-    // Validation for optional fields
     if (rating !== undefined && rating !== null) {
       const ratingNumber = Number(rating);
       if (isNaN(ratingNumber) || ratingNumber < 1 || ratingNumber > 5) {
         return res.status(400).json({
           success: false,
-          message: 'If provided, rating must be a number between 1 and 5',
+          message: 'If provided, rating must be 1-5',
         });
       }
     }
@@ -403,7 +387,6 @@ exports.updateReview = async (req, res) => {
       });
     }
 
-    // Find review
     const review = await Review.findById(reviewId);
 
     if (!review) {
@@ -413,7 +396,6 @@ exports.updateReview = async (req, res) => {
       });
     }
 
-    // Check if user owns the review
     if (review.userId.toString() !== userId) {
       return res.status(403).json({
         success: false,
@@ -421,60 +403,48 @@ exports.updateReview = async (req, res) => {
       });
     }
 
-    // Update fields (only if provided)
-    if (rating !== undefined && rating !== null) review.rating = Number(rating);
-    if (comment) review.comment = String(comment).trim();
+    if (rating !== undefined && rating !== null) {
+      review.rating = Number(rating);
+    }
 
-    // Handle new image uploads
+    // FILTER ON UPDATE
+    if (comment) {
+      const trimmed = String(comment).trim();
+      review.comment = filterBadWords(trimmed);
+    }
+
     if (req.files && req.files.length > 0) {
-      // Limit to 5 images
+
       if (req.files.length > 5) {
         return res.status(400).json({
           success: false,
-          message: 'Maximum 5 images allowed per review',
+          message: 'Maximum 5 images allowed',
         });
       }
 
-      // Delete old images from Cloudinary
-      if (review.images && review.images.length > 0) {
+      if (review.images?.length > 0) {
         for (const image of review.images) {
           try {
             await cloudinary.uploader.destroy(image.public_id);
-          } catch (deleteError) {
-            console.error('Cloudinary delete error:', deleteError);
-            // Continue - don't fail if old image delete fails
-          }
+          } catch (err) {}
         }
       }
 
-      // Upload new images
       let newImages = [];
-      for (const file of req.files) {
-        try {
-          const result = await cloudinary.uploader.upload(
-            `data:${file.mimetype};base64,${file.buffer.toString('base64')}`,
-            {
-              folder: 'roseluxe/reviews',
-              resource_type: 'auto',
-              max_file_size: 5242880,
-            }
-          );
 
-          newImages.push({
-            public_id: result.public_id,
-            url: result.secure_url,
-          });
-        } catch (uploadError) {
-          console.error('Cloudinary upload error:', uploadError);
-          return res.status(400).json({
-            success: false,
-            message: 'Failed to upload images',
-            details:
-              process.env.NODE_ENV === 'development'
-                ? uploadError.message
-                : undefined,
-          });
-        }
+      for (const file of req.files) {
+        const result = await cloudinary.uploader.upload(
+          `data:${file.mimetype};base64,${file.buffer.toString('base64')}`,
+          {
+            folder: 'roseluxe/reviews',
+            resource_type: 'auto',
+          }
+        );
+
+        newImages.push({
+          public_id: result.public_id,
+          url: result.secure_url,
+        });
       }
 
       review.images = newImages;
@@ -482,7 +452,6 @@ exports.updateReview = async (req, res) => {
 
     await review.save();
 
-    // ✅ FIXED: Populate with fullName field
     await review.populate([
       { path: 'userId', select: 'fullName email' },
       { path: 'productId', select: 'productName' },
@@ -493,23 +462,62 @@ exports.updateReview = async (req, res) => {
       message: 'Review updated successfully',
       data: review,
     });
+
   } catch (error) {
     console.error('Update review error:', error);
+
     res.status(500).json({
       success: false,
       message: 'Failed to update review',
-      error:
-        process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
 
-/**
- * DELETE REVIEW
- * DELETE /api/reviews/:reviewId
- * User can only delete their own review
- * ✅ VERIFIED: Correct implementation
- */
+exports.markHelpful = async (req, res) => {
+  try {
+    const { reviewId } = req.params;
+    const userId = req.user.id;
+
+    const review = await Review.findById(reviewId);
+
+    if (!review) {
+      return res.status(404).json({
+        success: false,
+        message: 'Review not found',
+      });
+    }
+
+    const alreadyMarked = review.helpfulBy.includes(userId);
+
+    if (alreadyMarked) {
+
+      review.helpfulBy = review.helpfulBy.filter(
+        (id) => id.toString() !== userId
+      );
+    } else {
+      
+      review.helpfulBy.push(userId);
+    }
+
+    review.helpful = review.helpfulBy.length;
+
+    await review.save();
+
+    res.status(200).json({
+      success: true,
+      helpful: review.helpful,
+      isHelpful: !alreadyMarked, 
+    });
+
+  } catch (error) {
+    console.error('Helpful error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update helpful',
+    });
+  }
+};
+
 exports.deleteReview = async (req, res) => {
   try {
     const { reviewId } = req.params;
@@ -571,20 +579,15 @@ exports.deleteReview = async (req, res) => {
   }
 };
 
-/**
- * ADMIN - GET ALL REVIEWS
- * GET /api/reviews/admin/all-reviews
- * ✅ FIXED: Properly populates fullName field
- */
 exports.adminGetAllReviews = async (req, res) => {
   try {
     const { page = 1, limit = 10, sort = '-createdAt' } = req.query;
 
     const skip = (page - 1) * limit;
 
-    // ✅ FIXED: Populate user data with fullName field
+    // FIXED: Populate user data with fullName field
     const reviews = await Review.find()
-      .populate('userId', 'fullName email') // ← ✅ FIXED: Select fullName field
+      .populate('userId', 'fullName email') // ← FIXED: Select fullName field
       .populate('productId', 'productName')
       .populate('orderId', 'orderId')
       .sort(sort)
@@ -613,11 +616,6 @@ exports.adminGetAllReviews = async (req, res) => {
   }
 };
 
-/**
- * ADMIN - DELETE REVIEW
- * DELETE /api/reviews/admin/:reviewId
- * ✅ VERIFIED: Correct implementation
- */
 exports.adminDeleteReview = async (req, res) => {
   try {
     const { reviewId } = req.params;

@@ -14,15 +14,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { API_ENDPOINTS, API_BASE_URL } from '../config/api';
 
-/**
- * ✅ FIX #1: Safe product extraction with validation
- * Handles multiple possible data structures from backend
- * Returns parsed product or null if invalid
- */
 const safeParseProduct = (product) => {
   try {
     if (!product || typeof product !== 'object') {
-      console.warn('⚠️ Invalid product object:', product);
+      console.warn('Invalid product object:', product);
       return null;
     }
 
@@ -32,7 +27,7 @@ const safeParseProduct = (product) => {
                       product?._id;
     
     if (!productId || typeof productId !== 'string') {
-      console.warn('⚠️ Product missing valid ID:', product);
+      console.warn('Product missing valid ID:', product);
       return null;
     }
 
@@ -44,12 +39,12 @@ const safeParseProduct = (product) => {
 
     // Validate numeric fields
     if (isNaN(price) || price < 0) {
-      console.warn('⚠️ Invalid price:', product?.price);
+      console.warn('Invalid price:', product?.price);
       return null;
     }
 
     if (isNaN(quantity) || quantity < 1) {
-      console.warn('⚠️ Invalid quantity:', product?.quantity);
+      console.warn('Invalid quantity:', product?.quantity);
       return null;
     }
 
@@ -61,16 +56,11 @@ const safeParseProduct = (product) => {
       quantity: parseInt(quantity),
     };
   } catch (error) {
-    console.error('❌ Error parsing product:', error);
+    console.error('Error parsing product:', error);
     return null;
   }
 };
 
-/**
- * ✅ FIX #2: Flatten order data into individual product review items
- * This converts orders with multiple products into separate review items
- * So user can review each product independently
- */
 const flattenOrdersToProducts = (orders, reviewedProductIds) => {
   const reviewItems = [];
 
@@ -80,7 +70,7 @@ const flattenOrdersToProducts = (orders, reviewedProductIds) => {
                      Array.isArray(order.items) ? order.items : [];
 
     if (!products.length) {
-      console.warn('⚠️ Order has no products:', order._id);
+      console.warn('Order has no products:', order._id);
       return;
     }
 
@@ -89,7 +79,7 @@ const flattenOrdersToProducts = (orders, reviewedProductIds) => {
       const parsedProduct = safeParseProduct(product);
       
       if (!parsedProduct) {
-        console.warn('⚠️ Could not parse product at index', index, 'in order', order._id);
+        console.warn('Could not parse product at index', index, 'in order', order._id);
         return;
       }
 
@@ -144,42 +134,70 @@ const ReviewScreen = ({ navigation }) => {
   }, [navigation]);
 
   const fetchToReviewItems = async () => {
+  try {
+    setLoading(true);
+
+    const token = await AsyncStorage.getItem('token');
+    const userData = await AsyncStorage.getItem('user');
+
+    if (!token || !userData) {
+      Alert.alert('Error', 'Please login first');
+      navigation.navigate('Login');
+      return;
+    }
+
+    let parsedUser;
     try {
-      setLoading(true);
+      parsedUser = JSON.parse(userData);
+    } catch {
+      Alert.alert('Error', 'Corrupted user data. Please login again.');
+      await AsyncStorage.multiRemove(['token', 'user']);
+      navigation.navigate('Login');
+      return;
+    }
 
-      // Get stored credentials
-      const token = await AsyncStorage.getItem('token');
-      const userData = await AsyncStorage.getItem('user');
+    const userId = parsedUser._id || parsedUser.id;
+    if (!userId) throw new Error('User not found');
 
-      if (!token || !userData) {
-        Alert.alert('Error', 'Please login first');
-        navigation.navigate('Login');
-        return;
-      }
+    const ordersResponse = await fetch(`${API_ENDPOINTS.ORDERS}/${userId}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
 
-      let parsedUser;
-      try {
-        parsedUser = JSON.parse(userData);
-      } catch (parseError) {
-        console.error('❌ Failed to parse user data:', parseError);
-        Alert.alert('Error', 'Corrupted user data. Please login again.');
+    if (!ordersResponse.ok) {
+      if (ordersResponse.status === 401) {
+        Alert.alert('Session Expired', 'Please login again.');
         await AsyncStorage.multiRemove(['token', 'user']);
         navigation.navigate('Login');
         return;
       }
 
-      const userId = parsedUser._id || parsedUser.id;
-
-      if (!userId) {
-        throw new Error('User ID not found in stored credentials');
+      if (ordersResponse.status === 404) {
+        Alert.alert(
+          'Error',
+          'Orders not found. Please contact support.'
+        );
+        return;
       }
 
-      // Build URL
-      const ordersUrl = `${API_ENDPOINTS.ORDERS}/${userId}`;
-      console.log('📤 Fetching orders from:', ordersUrl);
+      throw new Error('Failed to fetch orders');
+    }
 
-      // Fetch user's orders
-      const ordersResponse = await fetch(ordersUrl, {
+    const ordersData = await ordersResponse.json();
+
+    if (!ordersData.success || !Array.isArray(ordersData.data)) {
+      setToReviewItems([]);
+      return;
+    }
+
+    // ================= REVIEWS =================
+    let reviewedProductKeys = [];
+
+    try {
+      const reviewsResponse = await fetch(API_ENDPOINTS.REVIEWS_USER, {
         method: 'GET',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -187,138 +205,53 @@ const ReviewScreen = ({ navigation }) => {
         },
       });
 
-      console.log('📥 Orders response status:', ordersResponse.status);
+      if (reviewsResponse.ok) {
+        const reviewsData = await reviewsResponse.json();
 
-      // Handle HTTP errors
-      if (!ordersResponse.ok) {
-        if (ordersResponse.status === 401) {
-          // Token expired
-          console.warn('⚠️ Unauthorized - token may have expired');
-          Alert.alert('Session Expired', 'Please login again.');
-          await AsyncStorage.multiRemove(['token', 'user']);
-          navigation.navigate('Login');
-          return;
+        if (reviewsData.success && Array.isArray(reviewsData.data)) {
+          reviewedProductKeys = reviewsData.data.map((review) => {
+            const orderId = review.orderId?._id || review.orderId;
+            const productId = review.productId?._id || review.productId;
+            return `${orderId}_${productId}`;
+          });
         }
-
-        let errorText = '';
-        try {
-          errorText = await ordersResponse.text();
-        } catch (e) {
-          errorText = 'Unable to read error response';
-        }
-
-        console.error(`❌ HTTP ${ordersResponse.status} error:`, errorText);
-        
-        if (ordersResponse.status === 404) {
-          console.error('❌ 404 NOT FOUND - Common causes:');
-          console.error('   1. orderRoutes not registered in server.js');
-          console.error('   2. GET /:userId endpoint not defined');
-          console.error('   3. Wrong API base URL in config/api.js');
-          Alert.alert(
-            'Server Configuration Error',
-            'Orders endpoint not found (404). Please check your backend configuration.'
-          );
-          return;
-        }
-
-        throw new Error(`HTTP ${ordersResponse.status}: ${errorText || 'Unknown error'}`);
       }
-
-      // Parse response
-      let ordersData;
-      try {
-        ordersData = await ordersResponse.json();
-      } catch (parseError) {
-        console.error('❌ Failed to parse orders response:', parseError);
-        throw new Error('Invalid JSON response from server');
-      }
-
-      // Validate response structure
-      if (!ordersData.success) {
-        console.warn('⚠️ API returned success: false');
-        console.warn('Response:', ordersData);
-        setToReviewItems([]);
-        return;
-      }
-
-      if (!Array.isArray(ordersData.data)) {
-        console.error('❌ Orders data is not an array:', ordersData.data);
-        throw new Error('Invalid response format from server');
-      }
-
-      console.log(`✅ Fetched ${ordersData.data.length} orders`);
-
-      // Fetch user's existing reviews to exclude from list
-      console.log('📝 Fetching existing reviews from:', API_ENDPOINTS.REVIEWS_USER);
-      let reviewedProductIds = []; // Array of "orderId_productId" strings
-
-      try {
-        const reviewsResponse = await fetch(API_ENDPOINTS.REVIEWS_USER, {
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        });
-
-        if (reviewsResponse.ok) {
-          const reviewsData = await reviewsResponse.json();
-          if (reviewsData.success && Array.isArray(reviewsData.data)) {
-            // Create keys in format "orderId_productId" to uniquely identify reviewed products
-            reviewedProductIds = reviewsData.data.map((review) => {
-              const orderId = review.orderId?._id || review.orderId;
-              const productId = review.productId?._id || review.productId;
-              return `${orderId}_${productId}`;
-            });
-            console.log(`✅ User has ${reviewedProductIds.length} existing reviews`);
-          }
-        } else {
-          console.warn(`⚠️ Failed to fetch reviews: HTTP ${reviewsResponse.status}`);
-          // Continue anyway - we'll still show items even if reviews fetch fails
-        }
-      } catch (reviewError) {
-        console.warn('⚠️ Error fetching reviews:', reviewError.message);
-        // Continue - don't block on reviews fetch
-      }
-
-      // Filter to delivered orders only
-      const deliveredOrders = ordersData.data.filter(
-        (order) => order?.orderStatus === 'delivered'
-      );
-
-      console.log(`📊 Statistics:
-        - Total orders: ${ordersData.data.length}
-        - Delivered orders: ${deliveredOrders.length}
-        - Already reviewed products: ${reviewedProductIds.length}`);
-
-      // ✅ FIX: Flatten orders with multiple products into individual review items
-      const reviewItems = flattenOrdersToProducts(deliveredOrders, reviewedProductIds);
-
-      console.log(`✅ Total products to review: ${reviewItems.length}`);
-      
-      setToReviewItems(reviewItems);
-    } catch (error) {
-      console.error('❌ Error fetching review items:', error);
-      Alert.alert(
-        'Error Loading Items to Review',
-        error.message || 'Failed to load your delivered orders. Please try again.'
-      );
-    } finally {
-      setLoading(false);
+    } catch {
+      // silent fail — ok lang kahit di makuha reviews
     }
-  };
 
-  /**
-   * Navigate to ReviewForm screen with order and product info
-   * ✅ FIXED: Pass complete product data so ReviewFormScreen can access it directly
-   */
+    // ================= FILTER =================
+    const deliveredOrders = ordersData.data.filter(
+      (order) => order?.orderStatus === 'delivered'
+    );
+
+    const reviewItems = flattenOrdersToProducts(
+      deliveredOrders,
+      reviewedProductKeys
+    );
+
+    setToReviewItems(reviewItems);
+
+  } catch (error) {
+    console.error('fetchToReviewItems error:', error.message);
+
+    Alert.alert(
+      'Error',
+      error.message || 'Failed to load your orders.'
+    );
+  } finally {
+    setLoading(false);
+  }
+};
+
+
   const handleWriteReview = (item) => {
     navigation.navigate('ReviewForm', {
       orderId: item.orderId,
       productId: item.productId,
       productName: item.productName,
       orderNumber: item.orderNumber,
-      // ✅ FIXED: Pass complete product object with all details
+
       product: {
         productId: item.productId,
         productName: item.productName,
@@ -340,7 +273,7 @@ const ReviewScreen = ({ navigation }) => {
         <Image
           source={{ uri: item.image }}
           style={styles.productImage}
-          onError={() => console.log('⚠️ Failed to load product image')}
+          onError={() => console.log('Failed to load product image')}
         />
 
         <View style={styles.detailsContainer}>

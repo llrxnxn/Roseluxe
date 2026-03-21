@@ -39,10 +39,12 @@ const reviewSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
-    helpful: {
-      type: Number,
-      default: 0,
-    },
+    helpfulBy: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+      },
+    ],
   },
   {
     timestamps: true,
