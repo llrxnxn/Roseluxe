@@ -139,7 +139,7 @@ const ReviewFormScreen = ({ route, navigation }) => {
 
       // =============== SUBMIT REVIEW ===============
 
-      console.log('📤 Submitting review:');
+      console.log('Submitting review:');
       console.log('   orderId:', orderId);
       console.log('   productId:', productId);
       console.log('   rating:', rating, '(type:', typeof parseInt(rating), ')');
