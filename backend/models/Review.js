@@ -32,7 +32,7 @@ const reviewSchema = new mongoose.Schema(
     images: [
       {
         public_id: String,
-        url: String, 
+        url: String,
       },
     ],
     isVerifiedPurchase: {
@@ -45,6 +45,10 @@ const reviewSchema = new mongoose.Schema(
         ref: 'User',
       },
     ],
+    helpful: {
+      type: Number,
+      default: 0,
+    },
   },
   {
     timestamps: true,
@@ -54,11 +58,17 @@ const reviewSchema = new mongoose.Schema(
 /**
  * IMPORTANT: This unique index prevents duplicate reviews
  * It ensures user can only review each PRODUCT once per ORDER
+ * This allows edits (updates) but prevents multiple reviews of same product in same order
  */
-reviewSchema.index({ orderId: 1, productId: 1, userId: 1 }, { unique: true });
+reviewSchema.index(
+  { orderId: 1, productId: 1, userId: 1 },
+  { unique: true }
+);
 
-reviewSchema.index({ userId: 1, createdAt: -1 }); // Get user's reviews
-reviewSchema.index({ productId: 1, createdAt: -1 }); // Get product reviews
+// Additional indices for efficient queries
+reviewSchema.index({ userId: 1, createdAt: -1 }); // Get user's reviews sorted by date
+reviewSchema.index({ productId: 1, createdAt: -1 }); // Get product reviews sorted by date
 reviewSchema.index({ orderId: 1 }); // Get reviews for an order
+reviewSchema.index({ helpful: -1 }); // Sort by helpful count
 
 module.exports = mongoose.model('Review', reviewSchema);

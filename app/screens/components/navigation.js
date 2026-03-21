@@ -247,7 +247,7 @@ const Navigation = ({
 
               <DrawerMenuItem
                 icon="star"
-                label="To Review"
+                label="Reviews"
                 onPress={() => handleDrawerNavigation('Review')}
               />
             </>

@@ -61,143 +61,51 @@ const safeParseProduct = (product) => {
   }
 };
 
-const flattenOrdersToProducts = (orders, reviewedProductIds) => {
-  const reviewItems = [];
-
-  orders.forEach((order) => {
-    // Get products array (could be 'products' or 'items')
-    const products = Array.isArray(order.products) ? order.products :
-                     Array.isArray(order.items) ? order.items : [];
-
-    if (!products.length) {
-      console.warn('Order has no products:', order._id);
-      return;
-    }
-
-    // Create a review item for each product in the order
-    products.forEach((product, index) => {
-      const parsedProduct = safeParseProduct(product);
-      
-      if (!parsedProduct) {
-        console.warn('Could not parse product at index', index, 'in order', order._id);
-        return;
-      }
-
-      // Create unique key combining order ID and product ID
-      const reviewKey = `${order._id}_${parsedProduct.productId}`;
-
-      // Check if this specific product has already been reviewed
-      const alreadyReviewed = reviewedProductIds.includes(reviewKey);
-
-      if (!alreadyReviewed) {
-        reviewItems.push({
-          // Item metadata
-          reviewKey, // Unique identifier for this review item
-          orderId: order._id,
-          orderNumber: order.orderId, // e.g., "ORD-318323354"
-          orderStatus: order.orderStatus,
-          productIndex: index, // Which product in the order (0, 1, 2, etc.)
-          
-          // Product info
-          productId: parsedProduct.productId,
-          productName: parsedProduct.productName,
-          image: parsedProduct.image,
-          price: parsedProduct.price,
-          quantity: parsedProduct.quantity,
-          
-          // Order totals (for context)
-          orderTotalAmount: order.totals?.totalAmount || 0,
-          
-          // Shipping info (for order context)
-          shippingAddress: order.shippingInfo?.address || 'Not provided',
-        });
-      }
-    });
-  });
-
-  return reviewItems;
-};
-
 const ReviewScreen = ({ navigation }) => {
   const [toReviewItems, setToReviewItems] = useState([]);
+  const [reviewedItems, setReviewedItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('toReview'); // 'toReview' or 'reviewed'
 
   useEffect(() => {
-    fetchToReviewItems();
+    fetchReviewItems();
 
     // Refetch when screen comes into focus
     const unsubscribe = navigation.addListener('focus', () => {
-      fetchToReviewItems();
+      fetchReviewItems();
     });
 
     return unsubscribe;
   }, [navigation]);
 
-  const fetchToReviewItems = async () => {
-  try {
-    setLoading(true);
-
-    const token = await AsyncStorage.getItem('token');
-    const userData = await AsyncStorage.getItem('user');
-
-    if (!token || !userData) {
-      Alert.alert('Error', 'Please login first');
-      navigation.navigate('Login');
-      return;
-    }
-
-    let parsedUser;
+  const fetchReviewItems = async () => {
     try {
-      parsedUser = JSON.parse(userData);
-    } catch {
-      Alert.alert('Error', 'Corrupted user data. Please login again.');
-      await AsyncStorage.multiRemove(['token', 'user']);
-      navigation.navigate('Login');
-      return;
-    }
+      setLoading(true);
 
-    const userId = parsedUser._id || parsedUser.id;
-    if (!userId) throw new Error('User not found');
+      const token = await AsyncStorage.getItem('token');
+      const userData = await AsyncStorage.getItem('user');
 
-    const ordersResponse = await fetch(`${API_ENDPOINTS.ORDERS}/${userId}`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
+      if (!token || !userData) {
+        Alert.alert('Error', 'Please login first');
+        navigation.navigate('Login');
+        return;
+      }
 
-    if (!ordersResponse.ok) {
-      if (ordersResponse.status === 401) {
-        Alert.alert('Session Expired', 'Please login again.');
+      let parsedUser;
+      try {
+        parsedUser = JSON.parse(userData);
+      } catch {
+        Alert.alert('Error', 'Corrupted user data. Please login again.');
         await AsyncStorage.multiRemove(['token', 'user']);
         navigation.navigate('Login');
         return;
       }
 
-      if (ordersResponse.status === 404) {
-        Alert.alert(
-          'Error',
-          'Orders not found. Please contact support.'
-        );
-        return;
-      }
+      const userId = parsedUser._id || parsedUser.id;
+      if (!userId) throw new Error('User not found');
 
-      throw new Error('Failed to fetch orders');
-    }
-
-    const ordersData = await ordersResponse.json();
-
-    if (!ordersData.success || !Array.isArray(ordersData.data)) {
-      setToReviewItems([]);
-      return;
-    }
-
-    // ================= REVIEWS =================
-    let reviewedProductKeys = [];
-
-    try {
-      const reviewsResponse = await fetch(API_ENDPOINTS.REVIEWS_USER, {
+      // Fetch orders
+      const ordersResponse = await fetch(`${API_ENDPOINTS.ORDERS}/${userId}`, {
         method: 'GET',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -205,45 +113,129 @@ const ReviewScreen = ({ navigation }) => {
         },
       });
 
-      if (reviewsResponse.ok) {
-        const reviewsData = await reviewsResponse.json();
-
-        if (reviewsData.success && Array.isArray(reviewsData.data)) {
-          reviewedProductKeys = reviewsData.data.map((review) => {
-            const orderId = review.orderId?._id || review.orderId;
-            const productId = review.productId?._id || review.productId;
-            return `${orderId}_${productId}`;
-          });
+      if (!ordersResponse.ok) {
+        if (ordersResponse.status === 401) {
+          Alert.alert('Session Expired', 'Please login again.');
+          await AsyncStorage.multiRemove(['token', 'user']);
+          navigation.navigate('Login');
+          return;
         }
+
+        if (ordersResponse.status === 404) {
+          Alert.alert(
+            'Error',
+            'Orders not found. Please contact support.'
+          );
+          return;
+        }
+
+        throw new Error('Failed to fetch orders');
       }
-    } catch {
-      // silent fail — ok lang kahit di makuha reviews
+
+      const ordersData = await ordersResponse.json();
+
+      if (!ordersData.success || !Array.isArray(ordersData.data)) {
+        setToReviewItems([]);
+        setReviewedItems([]);
+        return;
+      }
+
+      // ================= FETCH USER REVIEWS =================
+      let reviewsMap = {}; // Map of reviewKey -> review data
+
+      try {
+        const reviewsResponse = await fetch(API_ENDPOINTS.REVIEWS_USER, {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (reviewsResponse.ok) {
+          const reviewsData = await reviewsResponse.json();
+
+          if (reviewsData.success && Array.isArray(reviewsData.data)) {
+            reviewsData.data.forEach((review) => {
+              const orderId = review.orderId?._id || review.orderId;
+              const productId = review.productId?._id || review.productId;
+              const reviewKey = `${orderId}_${productId}`;
+              reviewsMap[reviewKey] = review;
+            });
+          }
+        }
+      } catch {
+        // silent fail
+      }
+
+      // ================= FILTER DELIVERED ORDERS =================
+      const deliveredOrders = ordersData.data.filter(
+        (order) => order?.orderStatus === 'delivered'
+      );
+
+      // ================= BUILD TO REVIEW & REVIEWED ITEMS =================
+      const toReviewList = [];
+      const reviewedList = [];
+
+      deliveredOrders.forEach((order) => {
+        const products = Array.isArray(order.products) ? order.products :
+                         Array.isArray(order.items) ? order.items : [];
+
+        products.forEach((product, index) => {
+          const parsedProduct = safeParseProduct(product);
+          
+          if (!parsedProduct) return;
+
+          const reviewKey = `${order._id}_${parsedProduct.productId}`;
+          const subtotal = parsedProduct.price * parsedProduct.quantity;
+
+          const baseItem = {
+            reviewKey,
+            orderId: order._id,
+            orderNumber: order.orderId,
+            orderStatus: order.orderStatus,
+            productIndex: index,
+            productId: parsedProduct.productId,
+            productName: parsedProduct.productName,
+            image: parsedProduct.image,
+            price: parsedProduct.price,
+            quantity: parsedProduct.quantity,
+            subtotal,
+            orderTotalAmount: order.totals?.totalAmount || 0,
+            shippingAddress: order.shippingInfo?.address || 'Not provided',
+          };
+
+          if (reviewsMap[reviewKey]) {
+            // Product has been reviewed
+            reviewedList.push({
+              ...baseItem,
+              review: reviewsMap[reviewKey],
+              reviewId: reviewsMap[reviewKey]._id,
+              rating: reviewsMap[reviewKey].rating,
+              comment: reviewsMap[reviewKey].comment,
+              createdAt: reviewsMap[reviewKey].createdAt,
+            });
+          } else {
+            // Product hasn't been reviewed yet
+            toReviewList.push(baseItem);
+          }
+        });
+      });
+
+      setToReviewItems(toReviewList);
+      setReviewedItems(reviewedList);
+
+    } catch (error) {
+      console.error('fetchReviewItems error:', error.message);
+
+      Alert.alert(
+        'Error',
+        error.message || 'Failed to load your orders.'
+      );
+    } finally {
+      setLoading(false);
     }
-
-    // ================= FILTER =================
-    const deliveredOrders = ordersData.data.filter(
-      (order) => order?.orderStatus === 'delivered'
-    );
-
-    const reviewItems = flattenOrdersToProducts(
-      deliveredOrders,
-      reviewedProductKeys
-    );
-
-    setToReviewItems(reviewItems);
-
-  } catch (error) {
-    console.error('fetchToReviewItems error:', error.message);
-
-    Alert.alert(
-      'Error',
-      error.message || 'Failed to load your orders.'
-    );
-  } finally {
-    setLoading(false);
-  }
-};
-
+  };
 
   const handleWriteReview = (item) => {
     navigation.navigate('ReviewForm', {
@@ -251,7 +243,26 @@ const ReviewScreen = ({ navigation }) => {
       productId: item.productId,
       productName: item.productName,
       orderNumber: item.orderNumber,
+      product: {
+        productId: item.productId,
+        productName: item.productName,
+        price: item.price,
+        quantity: item.quantity,
+        image: item.image,
+      },
+    });
+  };
 
+  const handleEditReview = (item) => {
+    navigation.navigate('ReviewForm', {
+      orderId: item.orderId,
+      productId: item.productId,
+      productName: item.productName,
+      orderNumber: item.orderNumber,
+      reviewId: item.reviewId,
+      isEditing: true,
+      initialRating: item.rating,
+      initialComment: item.comment,
       product: {
         productId: item.productId,
         productName: item.productName,
@@ -263,11 +274,9 @@ const ReviewScreen = ({ navigation }) => {
   };
 
   /**
-   * Render individual review item card
+   * Render individual "To Review" item card
    */
   const renderToReviewItem = ({ item }) => {
-    const subtotal = item.price * item.quantity;
-
     return (
       <View style={styles.itemCard}>
         <Image
@@ -277,7 +286,6 @@ const ReviewScreen = ({ navigation }) => {
         />
 
         <View style={styles.detailsContainer}>
-          {/* Order number badge */}
           <View style={styles.orderBadge}>
             <Text style={styles.orderBadgeText}>Order: {item.orderNumber}</Text>
           </View>
@@ -301,7 +309,7 @@ const ReviewScreen = ({ navigation }) => {
           <View style={styles.totalContainer}>
             <Text style={styles.totalLabel}>Subtotal:</Text>
             <Text style={styles.totalAmount}>
-              ₱{subtotal.toFixed(2)}
+              ₱{item.subtotal.toFixed(2)}
             </Text>
           </View>
 
@@ -322,6 +330,96 @@ const ReviewScreen = ({ navigation }) => {
     );
   };
 
+  /**
+   * Render individual "Reviewed" item card
+   */
+  const renderReviewedItem = ({ item }) => {
+    const stars = Array(5).fill(0).map((_, i) => i < item.rating ? 'star' : 'star-outline');
+
+    return (
+      <View style={styles.itemCard}>
+        <Image
+          source={{ uri: item.image }}
+          style={styles.productImage}
+          onError={() => console.log('Failed to load product image')}
+        />
+
+        <View style={styles.detailsContainer}>
+          <View style={styles.orderBadge}>
+            <Text style={styles.orderBadgeText}>Order: {item.orderNumber}</Text>
+          </View>
+
+          <Text style={styles.productName} numberOfLines={2}>
+            {item.productName}
+          </Text>
+
+          {/* Rating Stars */}
+          <View style={styles.ratingContainer}>
+            {stars.map((star, index) => (
+              <MaterialCommunityIcons
+                key={index}
+                name={star}
+                size={16}
+                color="#FFB800"
+                style={styles.starIcon}
+              />
+            ))}
+            <Text style={styles.ratingText}>({item.rating}.0)</Text>
+          </View>
+
+          {/* Review Comment */}
+          <Text style={styles.reviewComment} numberOfLines={2}>
+            {item.comment || 'No comment'}
+          </Text>
+
+          {/* Reviewed Date */}
+          <Text style={styles.reviewDate}>
+            Reviewed on {new Date(item.createdAt).toLocaleDateString()}
+          </Text>
+
+          {/* Edit Button */}
+          <TouchableOpacity
+            style={styles.editButton}
+            onPress={() => handleEditReview(item)}
+            activeOpacity={0.8}
+          >
+            <MaterialCommunityIcons
+              name="pencil"
+              size={16}
+              color="#fff"
+            />
+            <Text style={styles.editButtonText}>Edit Review</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
+  // Empty state component
+  const renderEmptyState = (message) => (
+    <View style={styles.emptyContainer}>
+      <MaterialCommunityIcons
+        name={activeTab === 'toReview' ? "star-outline" : "check-circle"}
+        size={80}
+        color="#B76E79"
+        style={styles.emptyIcon}
+      />
+      <Text style={styles.emptyTitle}>
+        {activeTab === 'toReview' ? 'No Items to Review' : 'No Reviews Yet'}
+      </Text>
+      <Text style={styles.emptyText}>{message}</Text>
+      {activeTab === 'toReview' && (
+        <TouchableOpacity
+          style={styles.continueShoppingButton}
+          onPress={() => navigation.navigate('Products')}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.continueShoppingText}>Continue Shopping</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+
   // Loading state
   if (loading) {
     return (
@@ -331,6 +429,11 @@ const ReviewScreen = ({ navigation }) => {
       </View>
     );
   }
+
+  const currentItems = activeTab === 'toReview' ? toReviewItems : reviewedItems;
+  const emptyMessage = activeTab === 'toReview'
+    ? "You don't have any delivered items waiting for reviews yet."
+    : "You haven't written any reviews yet. Start by reviewing your purchased items!";
 
   return (
     <View style={styles.container}>
@@ -342,37 +445,54 @@ const ReviewScreen = ({ navigation }) => {
         >
           <MaterialCommunityIcons name="chevron-left" size={28} color="#B76E79" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>To Review</Text>
+        <Text style={styles.headerTitle}>Reviews</Text>
         <View style={{ width: 28 }} />
       </View>
 
-      {/* Content */}
-      {toReviewItems.length === 0 ? (
-        // Empty state
-        <View style={styles.emptyContainer}>
-          <MaterialCommunityIcons
-            name="check-circle"
-            size={80}
-            color="#B76E79"
-            style={styles.emptyIcon}
-          />
-          <Text style={styles.emptyTitle}>No Items to Review</Text>
-          <Text style={styles.emptyText}>
-            You don't have any delivered items waiting for reviews yet.
-          </Text>
-          <TouchableOpacity
-            style={styles.continueShoppingButton}
-            onPress={() => navigation.navigate('Products')}
-            activeOpacity={0.8}
+      {/* Tab Navigation */}
+      <View style={styles.tabContainer}>
+        <TouchableOpacity
+          style={[
+            styles.tab,
+            activeTab === 'toReview' && styles.tabActive,
+          ]}
+          onPress={() => setActiveTab('toReview')}
+        >
+          <Text
+            style={[
+              styles.tabText,
+              activeTab === 'toReview' && styles.tabTextActive,
+            ]}
           >
-            <Text style={styles.continueShoppingText}>Continue Shopping</Text>
-          </TouchableOpacity>
-        </View>
+            To Review ({toReviewItems.length})
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.tab,
+            activeTab === 'reviewed' && styles.tabActive,
+          ]}
+          onPress={() => setActiveTab('reviewed')}
+        >
+          <Text
+            style={[
+              styles.tabText,
+              activeTab === 'reviewed' && styles.tabTextActive,
+            ]}
+          >
+            Reviewed ({reviewedItems.length})
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Content */}
+      {currentItems.length === 0 ? (
+        renderEmptyState(emptyMessage)
       ) : (
-        // List of products to review
         <FlatList
-          data={toReviewItems}
-          renderItem={renderToReviewItem}
+          data={currentItems}
+          renderItem={activeTab === 'toReview' ? renderToReviewItem : renderReviewedItem}
           keyExtractor={(item) => item.reviewKey}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
@@ -422,6 +542,37 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 24,
     fontWeight: '700',
+    color: '#B76E79',
+  },
+
+  // Tab Navigation Styles
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+    paddingHorizontal: 16,
+  },
+
+  tab: {
+    flex: 1,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderBottomWidth: 3,
+    borderBottomColor: 'transparent',
+  },
+
+  tabActive: {
+    borderBottomColor: '#B76E79',
+  },
+
+  tabText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#999',
+  },
+
+  tabTextActive: {
     color: '#B76E79',
   },
 
@@ -551,6 +702,56 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
 
+  // Reviewed Item Styles
+  ratingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+
+  starIcon: {
+    marginRight: 2,
+  },
+
+  ratingText: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '500',
+    marginLeft: 6,
+  },
+
+  reviewComment: {
+    fontSize: 12,
+    color: '#666',
+    fontStyle: 'italic',
+    marginBottom: 6,
+    lineHeight: 16,
+  },
+
+  reviewDate: {
+    fontSize: 10,
+    color: '#999',
+    marginBottom: 10,
+  },
+
+  editButton: {
+    flexDirection: 'row',
+    backgroundColor: '#7B6B7E',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+  },
+
+  editButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#fff',
+  },
+
+  // Empty State
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',

@@ -4,7 +4,13 @@ const Order = require('../models/Order');
 const cloudinary = require('cloudinary').v2;
 const { filterBadWords } = require('../utils/badWordsFilter');
 
-
+/**
+ * =====================================================================
+ * CREATE REVIEW
+ * =====================================================================
+ * POST /reviews
+ * Creates a new review for a delivered product in user's order
+ */
 exports.createReview = async (req, res) => {
   try {
     const { orderId, productId, rating, comment } = req.body;
@@ -27,9 +33,8 @@ exports.createReview = async (req, res) => {
       });
     }
 
-
     const ratingNumber = Number(rating);
-    
+
     // Validate rating is a number between 1-5
     if (isNaN(ratingNumber) || ratingNumber < 1 || ratingNumber > 5) {
       return res.status(400).json({
@@ -147,8 +152,8 @@ exports.createReview = async (req, res) => {
       orderId,
       userId,
       productId,
-      rating: ratingNumber, // Use converted number
-      comment: filteredComment, // Use filtered comment
+      rating: ratingNumber,
+      comment: filteredComment,
       images,
       isVerifiedPurchase: true,
     });
@@ -175,7 +180,7 @@ exports.createReview = async (req, res) => {
       return res.status(400).json({
         success: false,
         message:
-          'You have already reviewed this product for this order. Each order can only be reviewed once.',
+          'You have already reviewed this product for this order. You can edit your existing review instead.',
       });
     }
 
@@ -210,6 +215,13 @@ exports.createReview = async (req, res) => {
   }
 };
 
+/**
+ * =====================================================================
+ * GET PRODUCT REVIEWS
+ * =====================================================================
+ * GET /reviews/product/:productId
+ * Retrieves all reviews for a specific product with pagination
+ */
 exports.getProductReviews = async (req, res) => {
   try {
     const { productId } = req.params;
@@ -226,7 +238,7 @@ exports.getProductReviews = async (req, res) => {
     }
 
     const reviews = await Review.find({ productId })
-      .populate('userId', 'fullName email') // ← FIXED: Select fullName field
+      .populate('userId', 'fullName email')
       .populate('productId', 'productName')
       .sort(sort)
       .skip(skip)
@@ -248,14 +260,10 @@ exports.getProductReviews = async (req, res) => {
       },
     ]);
 
-    console.log('Reviews populated:', {
+    console.log('Product reviews fetched:', {
+      productId,
       count: reviews.length,
-      firstReview: reviews[0] ? {
-        id: reviews[0]._id,
-        userId: reviews[0].userId,
-        userName: reviews[0].userId?.fullName,
-        userEmail: reviews[0].userId?.email,
-      } : null,
+      total,
     });
 
     res.status(200).json({
@@ -282,7 +290,13 @@ exports.getProductReviews = async (req, res) => {
   }
 };
 
-
+/**
+ * =====================================================================
+ * GET USER REVIEWS
+ * =====================================================================
+ * GET /reviews/user/my-reviews
+ * Retrieves all reviews written by the authenticated user
+ */
 exports.getUserReviews = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -295,9 +309,9 @@ exports.getUserReviews = async (req, res) => {
     }
 
     const reviews = await Review.find({ userId })
-      .populate('userId', 'fullName email') 
+      .populate('userId', 'fullName email')
       .populate('productId', 'productName productImage')
-      .populate('orderId', 'orderId orderDate')
+      .populate('orderId', 'orderId orderDate orderStatus')
       .sort('-createdAt');
 
     res.status(200).json({
@@ -316,7 +330,13 @@ exports.getUserReviews = async (req, res) => {
   }
 };
 
-
+/**
+ * =====================================================================
+ * GET REVIEW BY ID
+ * =====================================================================
+ * GET /reviews/:reviewId
+ * Retrieves a single review by ID
+ */
 exports.getReviewById = async (req, res) => {
   try {
     const { reviewId } = req.params;
@@ -330,7 +350,7 @@ exports.getReviewById = async (req, res) => {
     }
 
     const review = await Review.findById(reviewId)
-      .populate('userId', 'fullName email') 
+      .populate('userId', 'fullName email')
       .populate('productId', 'productName')
       .populate('orderId', 'orderId orderDate');
 
@@ -356,11 +376,193 @@ exports.getReviewById = async (req, res) => {
   }
 };
 
-
+/**
+ * =====================================================================
+ * UPDATE REVIEW
+ * =====================================================================
+ * PATCH /reviews/:reviewId
+ * Updates an existing review (rating, comment, and/or images)
+ * User can only update their own reviews
+ */
 exports.updateReview = async (req, res) => {
   try {
     const { reviewId } = req.params;
     const { rating, comment } = req.body;
+    const userId = req.user.id;
+
+    // =============== VALIDATION ===============
+
+    if (!mongoose.Types.ObjectId.isValid(reviewId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid review ID format',
+      });
+    }
+
+    // Validate rating if provided
+    if (rating !== undefined && rating !== null) {
+      const ratingNumber = Number(rating);
+      if (isNaN(ratingNumber) || ratingNumber < 1 || ratingNumber > 5) {
+        return res.status(400).json({
+          success: false,
+          message: 'Rating must be a number between 1 and 5',
+        });
+      }
+    }
+
+    // Validate comment if provided
+    if (comment !== undefined && comment !== null) {
+      const trimmedComment = String(comment).trim();
+      if (trimmedComment.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Review comment cannot be empty',
+        });
+      }
+      if (trimmedComment.length > 1000) {
+        return res.status(400).json({
+          success: false,
+          message: 'Comment must be 1000 characters or less',
+        });
+      }
+    }
+
+    // =============== AUTHORIZATION ===============
+
+    const review = await Review.findById(reviewId);
+
+    if (!review) {
+      return res.status(404).json({
+        success: false,
+        message: 'Review not found',
+      });
+    }
+
+    // Verify user owns this review
+    if (review.userId.toString() !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only update your own review',
+      });
+    }
+
+    // =============== UPDATE FIELDS ===============
+
+    if (rating !== undefined && rating !== null) {
+      review.rating = Number(rating);
+    }
+
+    if (comment !== undefined && comment !== null) {
+      const trimmedComment = String(comment).trim();
+      review.comment = filterBadWords(trimmedComment);
+    }
+
+    // =============== IMAGE HANDLING ===============
+
+    if (req.files && req.files.length > 0) {
+      // Validate image count
+      if (req.files.length > 5) {
+        return res.status(400).json({
+          success: false,
+          message: 'Maximum 5 images allowed per review',
+        });
+      }
+
+      // Delete old images from Cloudinary
+      if (review.images && review.images.length > 0) {
+        for (const image of review.images) {
+          try {
+            await cloudinary.uploader.destroy(image.public_id);
+            console.log('Deleted image from Cloudinary:', image.public_id);
+          } catch (deleteError) {
+            console.error('Failed to delete image:', deleteError);
+            // Don't fail the whole request if one image delete fails
+          }
+        }
+      }
+
+      // Upload new images
+      let newImages = [];
+      for (const file of req.files) {
+        try {
+          const result = await cloudinary.uploader.upload(
+            `data:${file.mimetype};base64,${file.buffer.toString('base64')}`,
+            {
+              folder: 'roseluxe/reviews',
+              resource_type: 'auto',
+              max_file_size: 5242880, // 5MB per file
+            }
+          );
+
+          newImages.push({
+            public_id: result.public_id,
+            url: result.secure_url,
+          });
+        } catch (uploadError) {
+          console.error('Cloudinary upload error:', uploadError);
+          return res.status(400).json({
+            success: false,
+            message: 'Failed to upload image(s)',
+            details:
+              process.env.NODE_ENV === 'development'
+                ? uploadError.message
+                : undefined,
+          });
+        }
+      }
+
+      review.images = newImages;
+    }
+
+    // =============== SAVE & RESPOND ===============
+
+    await review.save();
+
+    await review.populate([
+      { path: 'userId', select: 'fullName email' },
+      { path: 'productId', select: 'productName productImage' },
+      { path: 'orderId', select: 'orderId orderDate' },
+    ]);
+
+    res.status(200).json({
+      success: true,
+      message: 'Review updated successfully',
+      data: review,
+    });
+  } catch (error) {
+    console.error('Update review error:', error);
+
+    // Handle MongoDB validation errors
+    if (error.name === 'ValidationError') {
+      const errorMessages = Object.entries(error.errors).map(
+        ([field, err]) => `${field}: ${err.message}`
+      );
+      return res.status(400).json({
+        success: false,
+        message: 'Validation error',
+        errors: errorMessages,
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update review',
+      error:
+        process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
+};
+
+/**
+ * =====================================================================
+ * MARK HELPFUL
+ * =====================================================================
+ * PUT /reviews/:reviewId/helpful
+ * Toggle helpful vote on a review
+ */
+exports.markHelpful = async (req, res) => {
+  try {
+    const { reviewId } = req.params;
     const userId = req.user.id;
 
     if (!mongoose.Types.ObjectId.isValid(reviewId)) {
@@ -370,23 +572,6 @@ exports.updateReview = async (req, res) => {
       });
     }
 
-    if (rating !== undefined && rating !== null) {
-      const ratingNumber = Number(rating);
-      if (isNaN(ratingNumber) || ratingNumber < 1 || ratingNumber > 5) {
-        return res.status(400).json({
-          success: false,
-          message: 'If provided, rating must be 1-5',
-        });
-      }
-    }
-
-    if (comment && String(comment).trim().length > 1000) {
-      return res.status(400).json({
-        success: false,
-        message: 'Comment must be 1000 characters or less',
-      });
-    }
-
     const review = await Review.findById(reviewId);
 
     if (!review) {
@@ -396,128 +581,48 @@ exports.updateReview = async (req, res) => {
       });
     }
 
-    if (review.userId.toString() !== userId) {
-      return res.status(403).json({
-        success: false,
-        message: 'You can only update your own review',
-      });
-    }
-
-    if (rating !== undefined && rating !== null) {
-      review.rating = Number(rating);
-    }
-
-    // FILTER ON UPDATE
-    if (comment) {
-      const trimmed = String(comment).trim();
-      review.comment = filterBadWords(trimmed);
-    }
-
-    if (req.files && req.files.length > 0) {
-
-      if (req.files.length > 5) {
-        return res.status(400).json({
-          success: false,
-          message: 'Maximum 5 images allowed',
-        });
-      }
-
-      if (review.images?.length > 0) {
-        for (const image of review.images) {
-          try {
-            await cloudinary.uploader.destroy(image.public_id);
-          } catch (err) {}
-        }
-      }
-
-      let newImages = [];
-
-      for (const file of req.files) {
-        const result = await cloudinary.uploader.upload(
-          `data:${file.mimetype};base64,${file.buffer.toString('base64')}`,
-          {
-            folder: 'roseluxe/reviews',
-            resource_type: 'auto',
-          }
-        );
-
-        newImages.push({
-          public_id: result.public_id,
-          url: result.secure_url,
-        });
-      }
-
-      review.images = newImages;
-    }
-
-    await review.save();
-
-    await review.populate([
-      { path: 'userId', select: 'fullName email' },
-      { path: 'productId', select: 'productName' },
-    ]);
-
-    res.status(200).json({
-      success: true,
-      message: 'Review updated successfully',
-      data: review,
-    });
-
-  } catch (error) {
-    console.error('Update review error:', error);
-
-    res.status(500).json({
-      success: false,
-      message: 'Failed to update review',
-    });
-  }
-};
-
-exports.markHelpful = async (req, res) => {
-  try {
-    const { reviewId } = req.params;
-    const userId = req.user.id;
-
-    const review = await Review.findById(reviewId);
-
-    if (!review) {
-      return res.status(404).json({
-        success: false,
-        message: 'Review not found',
-      });
-    }
-
+    // Check if user already marked as helpful
     const alreadyMarked = review.helpfulBy.includes(userId);
 
     if (alreadyMarked) {
-
+      // Remove vote
       review.helpfulBy = review.helpfulBy.filter(
         (id) => id.toString() !== userId
       );
     } else {
-      
+      // Add vote
       review.helpfulBy.push(userId);
     }
 
+    // Update helpful count
     review.helpful = review.helpfulBy.length;
 
     await review.save();
 
     res.status(200).json({
       success: true,
+      message: alreadyMarked ? 'Removed helpful vote' : 'Marked as helpful',
       helpful: review.helpful,
-      isHelpful: !alreadyMarked, 
+      isHelpful: !alreadyMarked,
     });
-
   } catch (error) {
-    console.error('Helpful error:', error);
+    console.error('Mark helpful error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to update helpful',
+      message: 'Failed to update helpful status',
+      error:
+        process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
 
+/**
+ * =====================================================================
+ * DELETE REVIEW
+ * =====================================================================
+ * DELETE /reviews/:reviewId
+ * Deletes a review (only owner or admin can delete)
+ */
 exports.deleteReview = async (req, res) => {
   try {
     const { reviewId } = req.params;
@@ -554,6 +659,7 @@ exports.deleteReview = async (req, res) => {
       for (const image of review.images) {
         try {
           await cloudinary.uploader.destroy(image.public_id);
+          console.log('Deleted image:', image.public_id);
         } catch (deleteError) {
           console.error('Cloudinary delete error:', deleteError);
           // Continue - don't fail if image delete fails
@@ -561,7 +667,7 @@ exports.deleteReview = async (req, res) => {
       }
     }
 
-    // Delete review
+    // Delete review from database
     await Review.findByIdAndDelete(reviewId);
 
     res.status(200).json({
@@ -579,15 +685,21 @@ exports.deleteReview = async (req, res) => {
   }
 };
 
+/**
+ * =====================================================================
+ * ADMIN: GET ALL REVIEWS
+ * =====================================================================
+ * GET /reviews/admin/all-reviews
+ * Admin endpoint to fetch all reviews with pagination
+ */
 exports.adminGetAllReviews = async (req, res) => {
   try {
     const { page = 1, limit = 10, sort = '-createdAt' } = req.query;
 
     const skip = (page - 1) * limit;
 
-    // FIXED: Populate user data with fullName field
     const reviews = await Review.find()
-      .populate('userId', 'fullName email') // ← FIXED: Select fullName field
+      .populate('userId', 'fullName email')
       .populate('productId', 'productName')
       .populate('orderId', 'orderId')
       .sort(sort)
@@ -616,6 +728,13 @@ exports.adminGetAllReviews = async (req, res) => {
   }
 };
 
+/**
+ * =====================================================================
+ * ADMIN: DELETE REVIEW
+ * =====================================================================
+ * DELETE /reviews/admin/:reviewId
+ * Admin endpoint to delete any review
+ */
 exports.adminDeleteReview = async (req, res) => {
   try {
     const { reviewId } = req.params;
@@ -642,12 +761,15 @@ exports.adminDeleteReview = async (req, res) => {
       for (const image of review.images) {
         try {
           await cloudinary.uploader.destroy(image.public_id);
+          console.log('Deleted image:', image.public_id);
         } catch (deleteError) {
           console.error('Cloudinary delete error:', deleteError);
+          // Continue even if deletion fails
         }
       }
     }
 
+    // Delete review
     await Review.findByIdAndDelete(reviewId);
 
     res.status(200).json({

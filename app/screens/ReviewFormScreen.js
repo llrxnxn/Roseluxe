@@ -14,20 +14,27 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 
-
 import { API_ENDPOINTS } from '../config/api';
 
 const ReviewFormScreen = ({ route, navigation }) => {
-  
-  const { orderId, productId, productName, product } = route.params;
+  // ============ EXTRACT ROUTE PARAMS ============
+  const { 
+    orderId, 
+    productId, 
+    productName, 
+    product,
+    reviewId,          // ← For editing
+    isEditing = false, // ← Flag to detect edit mode
+    initialRating,     // ← Pre-fill rating on edit
+    initialComment     // ← Pre-fill comment on edit
+  } = route.params;
 
-  const [rating, setRating] = useState(0);
-  const [comment, setComment] = useState('');
+  // ============ STATE ============
+  const [rating, setRating] = useState(initialRating || 0);
+  const [comment, setComment] = useState(initialComment || '');
   const [images, setImages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-
-  
   const [displayProduct, setDisplayProduct] = useState(null);
 
   useEffect(() => {
@@ -45,6 +52,8 @@ const ReviewFormScreen = ({ route, navigation }) => {
       price: product.price,
       quantity: product.quantity,
       image: product.image,
+      isEditing,
+      reviewId,
     });
 
     setDisplayProduct(product);
@@ -119,14 +128,18 @@ const ReviewFormScreen = ({ route, navigation }) => {
 
       // =============== PREPARE FORM DATA ===============
 
-  
       const formData = new FormData();
-      formData.append('orderId', orderId);
-      formData.append('productId', productId); // Use exact productId from params
-      formData.append('rating', parseInt(rating)); // rating to number
+      
+      // For new reviews, include orderId and productId
+      if (!isEditing) {
+        formData.append('orderId', orderId);
+        formData.append('productId', productId);
+      }
+      
+      formData.append('rating', parseInt(rating));
       formData.append('comment', comment.trim());
 
-      // Add images
+      // Add images if any
       if (images.length > 0) {
         images.forEach((image, index) => {
           formData.append('images', {
@@ -137,17 +150,30 @@ const ReviewFormScreen = ({ route, navigation }) => {
         });
       }
 
-      // =============== SUBMIT REVIEW ===============
+      // =============== LOG SUBMISSION ===============
 
-      console.log('Submitting review:');
+      console.log(`Submitting ${isEditing ? 'EDIT' : 'NEW'} review:`);
       console.log('   orderId:', orderId);
       console.log('   productId:', productId);
-      console.log('   rating:', rating, '(type:', typeof parseInt(rating), ')');
+      console.log('   rating:', rating);
       console.log('   comment length:', comment.trim().length);
       console.log('   images:', images.length);
+      console.log('   isEditing:', isEditing);
+      console.log('   reviewId:', reviewId);
 
-      const response = await fetch(API_ENDPOINTS.REVIEWS, {
-        method: 'POST',
+      // =============== SUBMIT REVIEW ===============
+
+      // Determine endpoint and method based on edit mode
+      const endpoint = isEditing 
+        ? `${API_ENDPOINTS.REVIEWS}/${reviewId}` // PATCH endpoint for edit
+        : API_ENDPOINTS.REVIEWS; // POST endpoint for new
+      
+      const method = isEditing ? 'PATCH' : 'POST'; // ← KEY: Use PATCH for edits
+
+      console.log(`Making ${method} request to:`, endpoint);
+
+      const response = await fetch(endpoint, {
+        method,
         headers: {
           Authorization: `Bearer ${token}`,
           // Don't set Content-Type - let FormData handle it
@@ -158,7 +184,9 @@ const ReviewFormScreen = ({ route, navigation }) => {
       console.log('Response status:', response.status);
 
       if (!response.ok) {
-        let errorMessage = 'Failed to create review';
+        let errorMessage = isEditing 
+          ? 'Failed to update review' 
+          : 'Failed to create review';
         try {
           const errorData = await response.json();
           errorMessage = errorData.message || errorMessage;
@@ -171,17 +199,23 @@ const ReviewFormScreen = ({ route, navigation }) => {
       }
 
       const responseData = await response.json();
-      console.log('Review created successfully:', responseData.data._id);
+      console.log(isEditing ? 'Review updated successfully:' : 'Review created successfully:', responseData.data._id);
 
-      Alert.alert('Success', 'Review submitted successfully!', [
-        {
-          text: 'OK',
-          onPress: () => {
-            // Navigate back to ReviewScreen which will refresh
-            navigation.goBack();
+      Alert.alert(
+        'Success', 
+        isEditing 
+          ? 'Review updated successfully!' 
+          : 'Review submitted successfully!',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              // Navigate back to ReviewScreen which will refresh
+              navigation.goBack();
+            },
           },
-        },
-      ]);
+        ]
+      );
     } catch (error) {
       console.error('Submit review error:', error);
       
@@ -189,7 +223,7 @@ const ReviewFormScreen = ({ route, navigation }) => {
       if (error.message.includes('already reviewed')) {
         Alert.alert(
           'Review Already Exists',
-          'You have already reviewed this product for this order.'
+          'You have already reviewed this product for this order. Try editing instead.'
         );
       } else if (error.message.includes('delivered')) {
         Alert.alert(
@@ -241,7 +275,9 @@ const ReviewFormScreen = ({ route, navigation }) => {
         >
           <MaterialCommunityIcons name="chevron-left" size={28} color="#B76E79" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Write Review</Text>
+        <Text style={styles.headerTitle}>
+          {isEditing ? 'Edit Review' : 'Write Review'}
+        </Text>
         <View style={{ width: 28 }} />
       </View>
 
@@ -318,9 +354,9 @@ const ReviewFormScreen = ({ route, navigation }) => {
             disabled={images.length >= 5}
           >
             <MaterialCommunityIcons
-              name="cloud-upload"
-              size={24}
-              color={images.length >= 5 ? '#ccc' : '#B76E79'}
+              name="camera"
+              size={48}
+              color={images.length >= 5 ? '#ccc' : '#999'}
             />
             <Text
               style={[
@@ -328,9 +364,7 @@ const ReviewFormScreen = ({ route, navigation }) => {
                 images.length >= 5 && styles.uploadButtonTextDisabled,
               ]}
             >
-              {images.length >= 5
-                ? 'Maximum images reached'
-                : `Add Photos (${images.length}/5)`}
+              {images.length >= 5 ? 'Maximum images reached' : 'Add photo'}
             </Text>
           </TouchableOpacity>
 
@@ -368,12 +402,16 @@ const ReviewFormScreen = ({ route, navigation }) => {
           {submitting ? (
             <>
               <ActivityIndicator size="small" color="#fff" />
-              <Text style={styles.submitButtonText}>Submitting...</Text>
+              <Text style={styles.submitButtonText}>
+                {isEditing ? 'Updating...' : 'Submitting...'}
+              </Text>
             </>
           ) : (
             <>
               <MaterialCommunityIcons name="check" size={20} color="#fff" />
-              <Text style={styles.submitButtonText}>Submit Review</Text>
+              <Text style={styles.submitButtonText}>
+                {isEditing ? 'Update Review' : 'Submit Review'}
+              </Text>
             </>
           )}
         </TouchableOpacity>
@@ -574,26 +612,28 @@ const styles = StyleSheet.create({
   },
 
   uploadButton: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderStyle: 'dashed',
-    borderColor: '#B76E79',
-    borderRadius: 8,
-    paddingVertical: 16,
+    borderWidth: 0,
+    borderStyle: 'solid',
+    borderColor: 'transparent',
+    borderRadius: 12,
+    paddingVertical: 40,
+    paddingHorizontal: 16,
     gap: 8,
+    backgroundColor: '#f5f5f5',
   },
 
   uploadButtonDisabled: {
-    borderColor: '#ddd',
+    backgroundColor: '#f0f0f0',
     opacity: 0.6,
   },
 
   uploadButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#B76E79',
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#999',
   },
 
   uploadButtonTextDisabled: {
