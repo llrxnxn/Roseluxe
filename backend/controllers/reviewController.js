@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const Review = require('../models/Review');
-const Product = require('../models/Products');  // ✅ Keep as 'Products' (your file name)
+const Product = require('../models/Products');
 const Order = require('../models/Order');
 const cloudinary = require('cloudinary').v2;
 const { filterBadWords } = require('../utils/badWordsFilter');
@@ -9,8 +9,6 @@ const { filterBadWords } = require('../utils/badWordsFilter');
  * =====================================================================
  * CREATE REVIEW
  * =====================================================================
- * POST /reviews
- * Creates a new review for a delivered product in user's order
  */
 exports.createReview = async (req, res) => {
   try {
@@ -75,8 +73,6 @@ exports.createReview = async (req, res) => {
         message: 'Invalid product ID format',
       });
     }
-
-    // =============== BUSINESS LOGIC ===============
 
     // Check if order exists and belongs to user
     const order = await Order.findById(orderId);
@@ -146,9 +142,6 @@ exports.createReview = async (req, res) => {
     }
 
     // =============== CREATE REVIEW ===============
-
-    // Let MongoDB handle uniqueness via the compound index
-    // This prevents race conditions that manual checks don't catch
     const review = new Review({
       orderId,
       userId,
@@ -163,7 +156,7 @@ exports.createReview = async (req, res) => {
 
     await review.populate([
       { path: 'userId', select: 'fullName email' },
-      { path: 'productId', select: 'name images' },  // ✅ Changed: productName → name, productImage → images
+      { path: 'productId', select: 'name images' },
       { path: 'orderId', select: 'orderId orderDate' },
     ]);
 
@@ -220,8 +213,6 @@ exports.createReview = async (req, res) => {
  * =====================================================================
  * GET PRODUCT REVIEWS
  * =====================================================================
- * GET /reviews/product/:productId
- * Retrieves all reviews for a specific product with pagination
  */
 exports.getProductReviews = async (req, res) => {
   try {
@@ -240,7 +231,7 @@ exports.getProductReviews = async (req, res) => {
 
     const reviews = await Review.find({ productId })
       .populate('userId', 'fullName email')
-      .populate('productId', 'name')  // ✅ Changed: productName → name
+      .populate('productId', 'name')
       .sort(sort)
       .skip(skip)
       .limit(parseInt(limit));
@@ -295,8 +286,6 @@ exports.getProductReviews = async (req, res) => {
  * =====================================================================
  * GET USER REVIEWS
  * =====================================================================
- * GET /reviews/user/my-reviews
- * Retrieves all reviews written by the authenticated user
  */
 exports.getUserReviews = async (req, res) => {
   try {
@@ -311,7 +300,7 @@ exports.getUserReviews = async (req, res) => {
 
     const reviews = await Review.find({ userId })
       .populate('userId', 'fullName email')
-      .populate('productId', 'name images')  // ✅ Changed: productName → name, productImage → images
+      .populate('productId', 'name images')
       .populate('orderId', 'orderId orderDate orderStatus')
       .sort('-createdAt');
 
@@ -335,8 +324,6 @@ exports.getUserReviews = async (req, res) => {
  * =====================================================================
  * GET REVIEW BY ID
  * =====================================================================
- * GET /reviews/:reviewId
- * Retrieves a single review by ID
  */
 exports.getReviewById = async (req, res) => {
   try {
@@ -352,7 +339,7 @@ exports.getReviewById = async (req, res) => {
 
     const review = await Review.findById(reviewId)
       .populate('userId', 'fullName email')
-      .populate('productId', 'name')  // ✅ Changed: productName → name
+      .populate('productId', 'name')
       .populate('orderId', 'orderId orderDate');
 
     if (!review) {
@@ -381,9 +368,6 @@ exports.getReviewById = async (req, res) => {
  * =====================================================================
  * UPDATE REVIEW
  * =====================================================================
- * PATCH /reviews/:reviewId
- * Updates an existing review (rating, comment, and/or images)
- * User can only update their own reviews
  */
 exports.updateReview = async (req, res) => {
   try {
@@ -521,7 +505,7 @@ exports.updateReview = async (req, res) => {
 
     await review.populate([
       { path: 'userId', select: 'fullName email' },
-      { path: 'productId', select: 'name images' },  // ✅ Changed: productName → name, productImage → images
+      { path: 'productId', select: 'name images' },
       { path: 'orderId', select: 'orderId orderDate' },
     ]);
 
@@ -690,8 +674,6 @@ exports.deleteReview = async (req, res) => {
  * =====================================================================
  * ADMIN: GET ALL REVIEWS WITH FILTERING & PAGINATION
  * =====================================================================
- * GET /reviews/admin/all-reviews
- * Fetches all reviews with optional product and rating filters
  */
 exports.adminGetAllReviews = async (req, res) => {
   try {
@@ -718,13 +700,13 @@ exports.adminGetAllReviews = async (req, res) => {
       }
     }
 
-    console.log('📡 Admin fetching reviews with filter:', filterQuery, 'Page:', pageNum, 'Limit:', limitNum);
+    console.log('Admin fetching reviews with filter:', filterQuery, 'Page:', pageNum, 'Limit:', limitNum);
 
     // =============== FETCH REVIEWS ===============
 
     const reviews = await Review.find(filterQuery)
       .populate('userId', 'fullName email')
-      .populate('productId', 'name images')  // ✅ Changed: productName → name, productImage → images
+      .populate('productId', 'name images')
       .populate('orderId', 'orderId')
       .sort(sort)
       .skip(skip)
@@ -733,7 +715,7 @@ exports.adminGetAllReviews = async (req, res) => {
 
     const total = await Review.countDocuments(filterQuery);
 
-    console.log('✅ Reviews found:', reviews.length, 'Total:', total);
+    console.log('Reviews found:', reviews.length, 'Total:', total);
 
     // =============== CALCULATE RATING STATS FOR ALL REVIEWS ===============
 
@@ -799,7 +781,7 @@ exports.adminGetAllReviews = async (req, res) => {
       };
     }
 
-    console.log('📊 Stats calculated:', stats);
+    console.log('Stats calculated:', stats);
 
     res.status(200).json({
       success: true,
@@ -817,7 +799,7 @@ exports.adminGetAllReviews = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('❌ Admin get reviews error:', error);
+    console.error('Admin get reviews error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch reviews',
@@ -831,8 +813,6 @@ exports.adminGetAllReviews = async (req, res) => {
  * =====================================================================
  * ADMIN: GET PRODUCTS FOR FILTER DROPDOWN
  * =====================================================================
- * GET /reviews/admin/products-for-filter
- * Returns list of all products that have reviews
  */
 exports.adminGetProductsForFilter = async (req, res) => {
   try {
@@ -859,23 +839,23 @@ exports.adminGetProductsForFilter = async (req, res) => {
       {
         $project: {
           _id: '$product._id',
-          name: '$product.name',  // ✅ Changed: productName → name
-          images: '$product.images',  // ✅ Changed: productImage → images
+          name: '$product.name', 
+          images: '$product.images', 
         },
       },
       {
-        $sort: { name: 1 },  // ✅ Changed: productName → name
+        $sort: { name: 1 },  
       },
     ]);
 
-    console.log('✅ Products for filter fetched:', products.length);
+    console.log('Products for filter fetched:', products.length);
 
     res.status(200).json({
       success: true,
       data: products,
     });
   } catch (error) {
-    console.error('❌ Admin get products error:', error);
+    console.error('Admin get products error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch products',

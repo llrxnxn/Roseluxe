@@ -1,102 +1,72 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { View, StyleSheet, SafeAreaView, ScrollView, Alert, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { Text } from 'react-native-paper';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { useDispatch, useSelector } from 'react-redux';
 import AdminHeader from './AdminHeader';
-import axios from 'axios';
-import API_BASE_URL, { API_ENDPOINTS } from '../../config/api'; 
+
+import {
+  fetchProductsForFilter,
+  fetchReviews,
+  setMenuOpen,
+  setSelectedProduct,
+  setSelectedRating,
+  setCurrentPage,
+  resetFilters,
+  // Selectors
+  selectIsMenuOpen,
+  selectSelectedProduct,
+  selectSelectedRating,
+  selectCurrentPage,
+  selectProducts,
+  selectProductsLoading,
+  selectProductsError,
+  selectReviews,
+  selectReviewsLoading,
+  selectReviewsError,
+  selectStats,
+  selectPagination,
+} from '../../redux/slices/reviewSlice';
 
 const AdminReviews = ({ navigation }) => {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState(null);
-  const [selectedRating, setSelectedRating] = useState(null);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [reviewsData, setReviewsData] = useState(null);
-  const [products, setProducts] = useState([]);
-  const [error, setError] = useState(null);
+  const dispatch = useDispatch();
+
+  // =============== REDUX STATE ===============
+  const isMenuOpen = useSelector(selectIsMenuOpen);
+  const selectedProduct = useSelector(selectSelectedProduct);
+  const selectedRating = useSelector(selectSelectedRating);
+  const currentPage = useSelector(selectCurrentPage);
+
+  const products = useSelector(selectProducts);
+  const productsLoading = useSelector(selectProductsLoading);
+  const productsError = useSelector(selectProductsError);
+
+  const reviews = useSelector(selectReviews);
+  const reviewsLoading = useSelector(selectReviewsLoading);
+  const reviewsError = useSelector(selectReviewsError);
+
+  const stats = useSelector(selectStats);
+  const pagination = useSelector(selectPagination);
 
   const REVIEWS_LIMIT = 10;
 
-  // =============== FETCH PRODUCTS FOR FILTER ===============
+  // =============== FETCH PRODUCTS ON MOUNT ===============
   useEffect(() => {
-    fetchProductsForFilter();
-  }, []);
+    dispatch(fetchProductsForFilter());
+  }, [dispatch]);
 
-  const fetchProductsForFilter = async () => {
-    try {
-      const token = await AsyncStorage.getItem('token');
-      
-      const url = `${API_BASE_URL}/api/reviews/admin/products-for-filter`;
-      
-      console.log('Fetching products from:', url);
-      
-      const response = await axios.get(url, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (response.data.success) {
-        const allProducts = [
-          { _id: null, name: 'All Products', images: null },
-          ...response.data.data,
-        ];
-        setProducts(allProducts);
-        console.log('Products fetched:', allProducts.length);
-      }
-    } catch (err) {
-      console.error('Error fetching products:', err);
-      console.error('Error details:', err.response?.data || err.message);
-      setError('Failed to load product filters');
-    }
-  };
-
-  // =============== FETCH REVIEWS ===============
+  // =============== FETCH REVIEWS WHEN FILTERS CHANGE ===============
   useEffect(() => {
-    fetchReviews();
-  }, [selectedProduct, selectedRating, currentPage]);
-
-  const fetchReviews = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const token = await AsyncStorage.getItem('token');
-
-      const params = new URLSearchParams({
-        page: currentPage,
+    dispatch(
+      fetchReviews({
+        selectedProduct,
+        selectedRating,
+        currentPage,
         limit: REVIEWS_LIMIT,
-        sort: '-createdAt',
-      });
-
-      if (selectedProduct) {
-        params.append('productId', selectedProduct);
-      }
-
-      if (selectedRating) {
-        params.append('rating', selectedRating);
-      }
-
-      const url = `${API_BASE_URL}/api/reviews/admin/all-reviews?${params.toString()}`;
-      
-      console.log('📡 Fetching reviews from:', url);
-
-      const response = await axios.get(url, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (response.data.success) {
-        console.log('Reviews fetched successfully:', response.data.data.length, 'reviews');
-        setReviewsData(response.data);
-      }
-    } catch (err) {
-      console.error('Error fetching reviews:', err);
-      console.error('Error response:', err.response?.data);
-      setError(err.response?.data?.message || 'Failed to fetch reviews');
-    } finally {
-      setLoading(false);
-    }
-  };
+      })
+    );
+  }, [dispatch, selectedProduct, selectedRating, currentPage]);
 
   const menuItems = [
     {
@@ -184,12 +154,13 @@ const AdminReviews = ({ navigation }) => {
     </View>
   );
 
-  if (loading && !reviewsData) {
+  // =============== LOADING STATE ===============
+  if (reviewsLoading && reviews.length === 0) {
     return (
       <SafeAreaView style={styles.container}>
         <AdminHeader
           menuItems={menuItems}
-          onMenuPress={(isOpen) => setIsMenuOpen(isOpen)}
+          onMenuPress={(isOpen) => dispatch(setMenuOpen(isOpen))}
         />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#B76E79" />
@@ -199,27 +170,21 @@ const AdminReviews = ({ navigation }) => {
     );
   }
 
-  const stats = reviewsData?.stats || {
-    averageRating: 0,
-    totalReviews: 0,
-    ratingDistribution: { 5: { count: 0, percentage: 0 }, 4: { count: 0, percentage: 0 }, 3: { count: 0, percentage: 0 }, 2: { count: 0, percentage: 0 }, 1: { count: 0, percentage: 0 } },
-  };
-
-  const reviews = reviewsData?.data || [];
-  const pagination = reviewsData?.pagination || { page: 1, pages: 1, total: 0 };
+  // =============== ERROR HANDLING ===============
+  const displayError = reviewsError || productsError;
 
   return (
     <SafeAreaView style={styles.container}>
       <AdminHeader
         menuItems={menuItems}
-        onMenuPress={(isOpen) => setIsMenuOpen(isOpen)}
+        onMenuPress={(isOpen) => dispatch(setMenuOpen(isOpen))}
       />
 
       <ScrollView
         contentContainerStyle={styles.content}
         scrollEnabled={!isMenuOpen}
       >
-        {/* ========== STATS SECTION - COMPACT ========== */}
+        {/* ========== STATS SECTION ========== */}
         <View style={styles.statsSection}>
           {/* Overall Rating */}
           <View style={styles.overallRatingCard}>
@@ -245,12 +210,22 @@ const AdminReviews = ({ navigation }) => {
           </View>
         </View>
 
-        {/* ========== FILTERS SECTION - COMPACT ========== */}
+        {/* ========== FILTERS SECTION ========== */}
         <View style={styles.filtersContainer}>
           {/* Filter by Product */}
           {products.length > 0 && (
             <View style={styles.filterGroup}>
-              <Text style={styles.filterGroupTitle}>Product:</Text>
+              <View style={styles.filterGroupHeader}>
+                <Text style={styles.filterGroupTitle}>Product:</Text>
+                {(selectedProduct || selectedRating) && (
+                  <TouchableOpacity
+                    onPress={() => dispatch(resetFilters())}
+                    style={styles.resetButton}
+                  >
+                    <Text style={styles.resetButtonText}>Reset</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -264,10 +239,7 @@ const AdminReviews = ({ navigation }) => {
                       styles.filterButtonSmall,
                       selectedProduct === product._id && styles.filterButtonSmallActive,
                     ]}
-                    onPress={() => {
-                      setSelectedProduct(product._id);
-                      setCurrentPage(1);
-                    }}
+                    onPress={() => dispatch(setSelectedProduct(product._id))}
                   >
                     <Text
                       style={[
@@ -295,10 +267,9 @@ const AdminReviews = ({ navigation }) => {
                     styles.ratingFilterButtonSmall,
                     selectedRating === rating && styles.ratingFilterButtonSmallActive,
                   ]}
-                  onPress={() => {
-                    setSelectedRating(selectedRating === rating ? null : rating);
-                    setCurrentPage(1);
-                  }}
+                  onPress={() =>
+                    dispatch(setSelectedRating(selectedRating === rating ? null : rating))
+                  }
                 >
                   <Text
                     style={[
@@ -320,13 +291,13 @@ const AdminReviews = ({ navigation }) => {
             Reviews ({pagination.total})
           </Text>
 
-          {error && (
+          {displayError && (
             <View style={styles.errorContainer}>
-              <Text style={styles.errorText}>{error}</Text>
+              <Text style={styles.errorText}>{displayError}</Text>
             </View>
           )}
 
-          {loading ? (
+          {reviewsLoading ? (
             <ActivityIndicator size="large" color="#B76E79" style={{ marginVertical: 20 }} />
           ) : reviews.length > 0 ? (
             <>
@@ -364,7 +335,7 @@ const AdminReviews = ({ navigation }) => {
 
                   <View style={styles.reviewFooter}>
                     <Text style={styles.helpfulCount}>
-                      👍 {review.helpful || 0}
+                      {review.helpful || 0}
                     </Text>
                   </View>
                 </View>
@@ -375,7 +346,7 @@ const AdminReviews = ({ navigation }) => {
                 <View style={styles.paginationContainer}>
                   <TouchableOpacity
                     disabled={currentPage === 1}
-                    onPress={() => setCurrentPage(currentPage - 1)}
+                    onPress={() => dispatch(setCurrentPage(currentPage - 1))}
                     style={[
                       styles.paginationButtonSmall,
                       currentPage === 1 && styles.paginationButtonDisabled,
@@ -390,7 +361,7 @@ const AdminReviews = ({ navigation }) => {
 
                   <TouchableOpacity
                     disabled={currentPage === pagination.pages}
-                    onPress={() => setCurrentPage(currentPage + 1)}
+                    onPress={() => dispatch(setCurrentPage(currentPage + 1))}
                     style={[
                       styles.paginationButtonSmall,
                       currentPage === pagination.pages && styles.paginationButtonDisabled,
@@ -510,7 +481,20 @@ const styles = StyleSheet.create({
   filterGroup: {
     gap: 6,
   },
+  filterGroupHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   filterGroupTitle: { fontSize: 12, fontWeight: '600', color: '#333' },
+
+  resetButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: '#FFE8E8',
+  },
+  resetButtonText: { fontSize: 10, color: '#D32F2F', fontWeight: '600' },
 
   filterScroll: { marginHorizontal: -10 },
   filterScrollContent: { paddingHorizontal: 10, gap: 6 },
