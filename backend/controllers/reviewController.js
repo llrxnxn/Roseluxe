@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const Review = require('../models/Review');
+const Product = require('../models/Products');  // ✅ Keep as 'Products' (your file name)
 const Order = require('../models/Order');
 const cloudinary = require('cloudinary').v2;
 const { filterBadWords } = require('../utils/badWordsFilter');
@@ -162,7 +163,7 @@ exports.createReview = async (req, res) => {
 
     await review.populate([
       { path: 'userId', select: 'fullName email' },
-      { path: 'productId', select: 'productName productImage' },
+      { path: 'productId', select: 'name images' },  // ✅ Changed: productName → name, productImage → images
       { path: 'orderId', select: 'orderId orderDate' },
     ]);
 
@@ -239,7 +240,7 @@ exports.getProductReviews = async (req, res) => {
 
     const reviews = await Review.find({ productId })
       .populate('userId', 'fullName email')
-      .populate('productId', 'productName')
+      .populate('productId', 'name')  // ✅ Changed: productName → name
       .sort(sort)
       .skip(skip)
       .limit(parseInt(limit));
@@ -310,7 +311,7 @@ exports.getUserReviews = async (req, res) => {
 
     const reviews = await Review.find({ userId })
       .populate('userId', 'fullName email')
-      .populate('productId', 'productName productImage')
+      .populate('productId', 'name images')  // ✅ Changed: productName → name, productImage → images
       .populate('orderId', 'orderId orderDate orderStatus')
       .sort('-createdAt');
 
@@ -351,7 +352,7 @@ exports.getReviewById = async (req, res) => {
 
     const review = await Review.findById(reviewId)
       .populate('userId', 'fullName email')
-      .populate('productId', 'productName')
+      .populate('productId', 'name')  // ✅ Changed: productName → name
       .populate('orderId', 'orderId orderDate');
 
     if (!review) {
@@ -520,7 +521,7 @@ exports.updateReview = async (req, res) => {
 
     await review.populate([
       { path: 'userId', select: 'fullName email' },
-      { path: 'productId', select: 'productName productImage' },
+      { path: 'productId', select: 'name images' },  // ✅ Changed: productName → name, productImage → images
       { path: 'orderId', select: 'orderId orderDate' },
     ]);
 
@@ -687,38 +688,136 @@ exports.deleteReview = async (req, res) => {
 
 /**
  * =====================================================================
- * ADMIN: GET ALL REVIEWS
+ * ADMIN: GET ALL REVIEWS WITH FILTERING & PAGINATION
  * =====================================================================
  * GET /reviews/admin/all-reviews
- * Admin endpoint to fetch all reviews with pagination
+ * Fetches all reviews with optional product and rating filters
  */
 exports.adminGetAllReviews = async (req, res) => {
   try {
-    const { page = 1, limit = 10, sort = '-createdAt' } = req.query;
+    const { page = 1, limit = 10, sort = '-createdAt', productId, rating } = req.query;
 
-    const skip = (page - 1) * limit;
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const limitNum = Math.max(1, Math.min(100, parseInt(limit) || 10));
+    const skip = (pageNum - 1) * limitNum;
 
-    const reviews = await Review.find()
+    // =============== BUILD FILTER QUERY ===============
+
+    const filterQuery = {};
+
+    // Filter by productId if provided
+    if (productId && mongoose.Types.ObjectId.isValid(productId)) {
+      filterQuery.productId = new mongoose.Types.ObjectId(productId);
+    }
+
+    // Filter by rating if provided
+    if (rating !== undefined && rating !== null) {
+      const ratingNumber = Number(rating);
+      if (!isNaN(ratingNumber) && ratingNumber >= 1 && ratingNumber <= 5) {
+        filterQuery.rating = ratingNumber;
+      }
+    }
+
+    console.log('📡 Admin fetching reviews with filter:', filterQuery, 'Page:', pageNum, 'Limit:', limitNum);
+
+    // =============== FETCH REVIEWS ===============
+
+    const reviews = await Review.find(filterQuery)
       .populate('userId', 'fullName email')
-      .populate('productId', 'productName')
+      .populate('productId', 'name images')  // ✅ Changed: productName → name, productImage → images
       .populate('orderId', 'orderId')
       .sort(sort)
       .skip(skip)
-      .limit(parseInt(limit));
+      .limit(limitNum)
+      .lean();
 
-    const total = await Review.countDocuments();
+    const total = await Review.countDocuments(filterQuery);
+
+    console.log('✅ Reviews found:', reviews.length, 'Total:', total);
+
+    // =============== CALCULATE RATING STATS FOR ALL REVIEWS ===============
+
+    const ratingStats = await Review.aggregate([
+      { $match: filterQuery },
+      {
+        $group: {
+          _id: null,
+          averageRating: { $avg: '$rating' },
+          totalReviews: { $sum: 1 },
+          counts_5: { $sum: { $cond: [{ $eq: ['$rating', 5] }, 1, 0] } },
+          counts_4: { $sum: { $cond: [{ $eq: ['$rating', 4] }, 1, 0] } },
+          counts_3: { $sum: { $cond: [{ $eq: ['$rating', 3] }, 1, 0] } },
+          counts_2: { $sum: { $cond: [{ $eq: ['$rating', 2] }, 1, 0] } },
+          counts_1: { $sum: { $cond: [{ $eq: ['$rating', 1] }, 1, 0] } },
+        },
+      },
+    ]);
+
+    // =============== FORMAT RESPONSE ===============
+
+    let stats = {
+      averageRating: 0,
+      totalReviews: 0,
+      ratingDistribution: {
+        5: { count: 0, percentage: 0 },
+        4: { count: 0, percentage: 0 },
+        3: { count: 0, percentage: 0 },
+        2: { count: 0, percentage: 0 },
+        1: { count: 0, percentage: 0 },
+      },
+    };
+
+    if (ratingStats.length > 0) {
+      const aggregated = ratingStats[0];
+      const totalForPercentage = aggregated.totalReviews || 1;
+
+      stats = {
+        averageRating: parseFloat(aggregated.averageRating.toFixed(1)),
+        totalReviews: aggregated.totalReviews,
+        ratingDistribution: {
+          5: {
+            count: aggregated.counts_5,
+            percentage: Math.round((aggregated.counts_5 / totalForPercentage) * 100),
+          },
+          4: {
+            count: aggregated.counts_4,
+            percentage: Math.round((aggregated.counts_4 / totalForPercentage) * 100),
+          },
+          3: {
+            count: aggregated.counts_3,
+            percentage: Math.round((aggregated.counts_3 / totalForPercentage) * 100),
+          },
+          2: {
+            count: aggregated.counts_2,
+            percentage: Math.round((aggregated.counts_2 / totalForPercentage) * 100),
+          },
+          1: {
+            count: aggregated.counts_1,
+            percentage: Math.round((aggregated.counts_1 / totalForPercentage) * 100),
+          },
+        },
+      };
+    }
+
+    console.log('📊 Stats calculated:', stats);
 
     res.status(200).json({
       success: true,
       data: reviews,
       pagination: {
         total,
-        page: parseInt(page),
-        pages: Math.ceil(total / limit),
+        page: pageNum,
+        pages: Math.ceil(total / limitNum),
+        limit: limitNum,
+      },
+      stats,
+      filters: {
+        productId: productId || null,
+        rating: rating ? Number(rating) : null,
       },
     });
   } catch (error) {
-    console.error('Admin get reviews error:', error);
+    console.error('❌ Admin get reviews error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch reviews',
@@ -730,57 +829,56 @@ exports.adminGetAllReviews = async (req, res) => {
 
 /**
  * =====================================================================
- * ADMIN: DELETE REVIEW
+ * ADMIN: GET PRODUCTS FOR FILTER DROPDOWN
  * =====================================================================
- * DELETE /reviews/admin/:reviewId
- * Admin endpoint to delete any review
+ * GET /reviews/admin/products-for-filter
+ * Returns list of all products that have reviews
  */
-exports.adminDeleteReview = async (req, res) => {
+exports.adminGetProductsForFilter = async (req, res) => {
   try {
-    const { reviewId } = req.params;
+    console.log('📡 Fetching products for filter...');
 
-    // Validate reviewId is a valid MongoDB ObjectId
-    if (!mongoose.Types.ObjectId.isValid(reviewId)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid review ID format',
-      });
-    }
+    // Get all unique products that have reviews
+    const products = await Review.aggregate([
+      {
+        $group: {
+          _id: '$productId',
+        },
+      },
+      {
+        $lookup: {
+          from: 'products',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'product',
+        },
+      },
+      {
+        $unwind: '$product',
+      },
+      {
+        $project: {
+          _id: '$product._id',
+          name: '$product.name',  // ✅ Changed: productName → name
+          images: '$product.images',  // ✅ Changed: productImage → images
+        },
+      },
+      {
+        $sort: { name: 1 },  // ✅ Changed: productName → name
+      },
+    ]);
 
-    const review = await Review.findById(reviewId);
-
-    if (!review) {
-      return res.status(404).json({
-        success: false,
-        message: 'Review not found',
-      });
-    }
-
-    // Delete images from Cloudinary
-    if (review.images && review.images.length > 0) {
-      for (const image of review.images) {
-        try {
-          await cloudinary.uploader.destroy(image.public_id);
-          console.log('Deleted image:', image.public_id);
-        } catch (deleteError) {
-          console.error('Cloudinary delete error:', deleteError);
-          // Continue even if deletion fails
-        }
-      }
-    }
-
-    // Delete review
-    await Review.findByIdAndDelete(reviewId);
+    console.log('✅ Products for filter fetched:', products.length);
 
     res.status(200).json({
       success: true,
-      message: 'Review deleted by admin',
+      data: products,
     });
   } catch (error) {
-    console.error('Admin delete review error:', error);
+    console.error('❌ Admin get products error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to delete review',
+      message: 'Failed to fetch products',
       error:
         process.env.NODE_ENV === 'development' ? error.message : undefined,
     });

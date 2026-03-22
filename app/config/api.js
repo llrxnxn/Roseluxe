@@ -14,6 +14,10 @@ export const API_ENDPOINTS = {
   REVIEWS_USER: `${API_BASE_URL}/api/reviews/user/my-reviews`,
   REVIEWS_UPDATE: (reviewId) => `${API_BASE_URL}/api/reviews/${reviewId}`,
   REVIEWS_DELETE: (reviewId) => `${API_BASE_URL}/api/reviews/${reviewId}`,
+  
+  // ADMIN REVIEW ENDPOINTS
+  ADMIN_REVIEWS_ALL: `${API_BASE_URL}/api/reviews/admin/all-reviews`,
+  ADMIN_REVIEWS_PRODUCTS_FILTER: `${API_BASE_URL}/api/reviews/admin/products-for-filter`,
 
   // ADMIN ENDPOINTS
   ADMIN_GET_ALL_ORDERS: `${API_BASE_URL}/api/orders/admin/all-orders`,

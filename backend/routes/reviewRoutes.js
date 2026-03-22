@@ -8,7 +8,7 @@ const {
   updateReview,
   deleteReview,
   adminGetAllReviews,
-  adminDeleteReview,
+  adminGetProductsForFilter,
   markHelpful,
 } = require('../controllers/reviewController');
 
@@ -22,7 +22,7 @@ const { authenticateToken } = require('../middleware/auth');
  * These must come first to avoid being caught by /:reviewId pattern
  */
 router.get('/admin/all-reviews', authenticateToken, adminGetAllReviews);
-router.delete('/admin/:reviewId', authenticateToken, adminDeleteReview);
+router.get('/admin/products-for-filter', authenticateToken, adminGetProductsForFilter);
 
 /**
  * ===================================================================
