@@ -16,6 +16,8 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useFocusEffect } from '@react-navigation/native';
 import HeaderScreen from './components/HeaderScreen';
 import Navigation from './components/navigation';
+import LocalCartManager from '../utils/LocalCartManager';
+import { API_ENDPOINTS } from '../config/api';
 
 const { width } = Dimensions.get('window');
 const PRODUCT_CARD_WIDTH = (width - 40) / 2;
@@ -72,11 +74,8 @@ const WishlistScreen = ({ navigation }) => {
 
   const fetchCartCount = async () => {
     try {
-      const savedWishlist = await AsyncStorage.getItem('wishlist');
-      if (savedWishlist) {
-        const parsed = JSON.parse(savedWishlist);
-        setCartCount(parsed.length);
-      }
+      const count = await LocalCartManager.getCartCount();
+      setCartCount(count);
     } catch (error) {
       console.log('Error fetching cart count:', error);
       setCartCount(0);
@@ -107,51 +106,55 @@ const WishlistScreen = ({ navigation }) => {
     setWishlist(updatedWishlist);
     setFilteredWishlist(updatedWishlist);
     await AsyncStorage.setItem('wishlist', JSON.stringify(updatedWishlist));
-    setCartCount(updatedWishlist.length);
+    setCartCount(await LocalCartManager.getCartCount());
     Alert.alert('Removed', 'Item removed from wishlist');
   };
 
-  // Add to cart from wishlist
+  // Add to cart from wishlist using LocalCartManager
   const addToCart = async (product) => {
     try {
-      const token = await AsyncStorage.getItem('token');
-      const userData = await AsyncStorage.getItem('user');
+      setLoading(true);
 
-      if (!token || !userData) {
+      // Check if user is logged in
+      const token = await AsyncStorage.getItem('token');
+      if (!token) {
         Alert.alert('Login Required', 'Please login to add items to cart');
         navigation.navigate('Login');
+        setLoading(false);
         return;
       }
 
-      const user = JSON.parse(userData);
-      
-      // Call API to add to cart
-      const response = await fetch(`${API_ENDPOINTS.CART}/${user.id || user._id}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+      // Add to local cart using LocalCartManager
+      const result = await LocalCartManager.addToCart(
+        product._id,
+        {
+          productName: product.name,
+          price: product.price,
+          image: product.images?.[0] || '',
         },
-        body: JSON.stringify({
-          productId: product._id,
-          quantity: 1,
-        }),
-      });
+        1
+      );
 
-      if (response.ok) {
-        Alert.alert('Added', `${product.name} added to cart`, [
-          { text: 'Continue' },
+      if (result.success) {
+        // Update cart count
+        const newCartCount = await LocalCartManager.getCartCount();
+        setCartCount(newCartCount);
+
+        Alert.alert('Success', `${product.name} added to cart`, [
+          { text: 'Back to Wishlist' },
           {
             text: 'View Cart',
             onPress: () => navigation.navigate('Cart'),
           },
         ]);
       } else {
-        Alert.alert('Error', 'Failed to add to cart');
+        Alert.alert('Error', result.message || 'Failed to add to cart');
       }
     } catch (error) {
       console.error('Error adding to cart:', error);
       Alert.alert('Error', 'Failed to add to cart');
+    } finally {
+      setLoading(false);
     }
   };
 
