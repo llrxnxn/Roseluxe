@@ -78,20 +78,43 @@ const ProductScreen = ({ navigation }) => {
 
       const priceRange = PRICE_RANGES[selectedPriceRange];
 
+      // Find the category ID if a specific category is selected
+      let categoryParam = "";
+      if (selectedCategory !== "All") {
+        // Search for the category in the fetched categories array
+        const selectedCat = categories.find((cat) => {
+          // Handle both string names and objects with _id and name
+          if (typeof cat === "string") {
+            return cat === selectedCategory;
+          }
+          return cat.name === selectedCategory;
+        });
+        
+        if (selectedCat) {
+          // If it's an object, use the _id; if it's a string, use the name
+          categoryParam = typeof selectedCat === "string" ? selectedCat : (selectedCat._id || selectedCat.name);
+        }
+      }
+
       const params = {
         search: searchQuery || "",
-        category: selectedCategory !== "All" ? selectedCategory : "",
+        category: categoryParam,
         minPrice: priceRange.min,
         maxPrice: priceRange.max === Infinity ? "" : priceRange.max
       };
+
+      console.log("Fetching products with params:", params);
 
       const res = await axios.get(API_ENDPOINTS.PRODUCTS, { params });
 
       const productData = res.data?.products || [];
 
+      console.log("Products fetched:", productData.length);
+
       setProducts(productData);
 
     } catch (err) {
+      console.error("Fetch products error:", err);
       Alert.alert("Error", "Failed to load products");
     } finally {
       setLoading(false);
@@ -106,11 +129,14 @@ const ProductScreen = ({ navigation }) => {
       const res = await axios.get(API_ENDPOINTS.CATEGORIES);
       const data = res.data.categories || [];
 
-      const categoryNames = ["All", ...data.map(c => c.name)];
-      setCategories(categoryNames);
+      console.log("Categories fetched:", data);
+
+      // Store the full category objects, not just names
+      // This way we can access both name and _id
+      setCategories(data);
 
     } catch (error) {
-      console.log("Fetch categories error", error);
+      console.error("Fetch categories error:", error);
     }
   };
 
@@ -166,7 +192,7 @@ const ProductScreen = ({ navigation }) => {
 
   useEffect(() => {
     fetchProducts();
-  }, [searchQuery, selectedCategory, selectedPriceRange]);
+  }, [searchQuery, selectedCategory, selectedPriceRange, categories]);
 
   useFocusEffect(
     useCallback(() => {
@@ -237,30 +263,36 @@ const ProductScreen = ({ navigation }) => {
   // ================================
   // CATEGORY DROPDOWN ITEM
   // ================================
-  const renderCategoryDropdownItem = ({ item }) => (
-    <TouchableOpacity
-      style={styles.dropdownItem}
-      onPress={() => {
-        setSelectedCategory(item);
-        setShowCategoryDropdown(false);
-        setFilterMode(null);
-      }}
-    >
-      <View style={styles.dropdownItemContent}>
-        {selectedCategory === item && (
-          <MaterialCommunityIcons name="check" size={18} color="#B76E79" />
-        )}
-        <Text
-          style={[
-            styles.dropdownItemText,
-            selectedCategory === item && styles.dropdownItemTextActive,
-          ]}
-        >
-          {item}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
+  const renderCategoryDropdownItem = ({ item }) => {
+    // Handle both string and object categories
+    const categoryName = typeof item === "string" ? item : item.name;
+    const isSelected = selectedCategory === categoryName;
+
+    return (
+      <TouchableOpacity
+        style={styles.dropdownItem}
+        onPress={() => {
+          setSelectedCategory(categoryName);
+          setShowCategoryDropdown(false);
+          setFilterMode(null);
+        }}
+      >
+        <View style={styles.dropdownItemContent}>
+          {isSelected && (
+            <MaterialCommunityIcons name="check" size={18} color="#B76E79" />
+          )}
+          <Text
+            style={[
+              styles.dropdownItemText,
+              isSelected && styles.dropdownItemTextActive,
+            ]}
+          >
+            {categoryName}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   // ================================
   // PRICE DROPDOWN ITEM
@@ -461,6 +493,12 @@ const ProductScreen = ({ navigation }) => {
     );
   };
 
+  // Get display name for category dropdown
+  const getCategoryDisplayName = () => {
+    if (selectedCategory === "All") return "Categories";
+    return selectedCategory;
+  };
+
   // ================================
   // UI
   // ================================
@@ -499,7 +537,7 @@ const ProductScreen = ({ navigation }) => {
                 selectedCategory !== "All" && styles.filterButtonTextActive,
               ]}
             >
-              {selectedCategory === "All" ? "Categories" : selectedCategory}
+              {getCategoryDisplayName()}
             </Text>
             <MaterialCommunityIcons
               name={showCategoryDropdown ? "chevron-up" : "chevron-down"}
@@ -571,9 +609,12 @@ const ProductScreen = ({ navigation }) => {
         {/* CATEGORY DROPDOWN */}
         {filterMode === "category" && (
           <FlatList
-            data={categories}
+            data={[{ name: "All" }, ...categories]}
             renderItem={renderCategoryDropdownItem}
-            keyExtractor={(item) => item}
+            keyExtractor={(item, index) => {
+              if (typeof item === "string") return item;
+              return item._id || index.toString();
+            }}
             style={styles.dropdownContainer}
             scrollEnabled={false}
             nestedScrollEnabled={true}
@@ -642,7 +683,7 @@ const ProductScreen = ({ navigation }) => {
 
 export default ProductScreen;
 
-// All styles remain the same as before...
+// All styles
 const styles = StyleSheet.create({
   /* FILTER SECTION */
   filterSection: {
