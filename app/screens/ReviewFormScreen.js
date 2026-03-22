@@ -8,6 +8,8 @@ import {
   ActivityIndicator,
   TextInput,
   Image,
+  Modal,
+  SafeAreaView,
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
@@ -36,6 +38,7 @@ const ReviewFormScreen = ({ route, navigation }) => {
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [displayProduct, setDisplayProduct] = useState(null);
+  const [imagePickerModalVisible, setImagePickerModalVisible] = useState(false);
 
   useEffect(() => {
     // Validate that we have product data
@@ -60,7 +63,41 @@ const ReviewFormScreen = ({ route, navigation }) => {
     setLoading(false);
   }, [route, product]);
 
-  const handlePickImage = async () => {
+  const handlePickImage = () => {
+    setImagePickerModalVisible(true);
+  };
+
+  const handleTakePhoto = async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'We need permission to access your camera');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.8,
+        allowsEditing: true,
+        aspect: [4, 3],
+      });
+
+      if (!result.canceled) {
+        const newImage = {
+          uri: result.assets[0].uri,
+          type: result.assets[0].type || 'image/jpeg',
+        };
+        setImages([...images, newImage]);
+      }
+      setImagePickerModalVisible(false);
+    } catch (error) {
+      console.error('Camera error:', error);
+      Alert.alert('Error', 'Failed to take photo');
+    }
+  };
+
+  const handleUploadFromGallery = async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
@@ -83,6 +120,7 @@ const ReviewFormScreen = ({ route, navigation }) => {
         }));
         setImages([...images, ...newImages]);
       }
+      setImagePickerModalVisible(false);
     } catch (error) {
       console.error('Image picker error:', error);
       Alert.alert('Error', 'Failed to pick image');
@@ -265,6 +303,82 @@ const ReviewFormScreen = ({ route, navigation }) => {
     );
   }
 
+  // ===== IMAGE PICKER MODAL COMPONENT =====
+  const ImagePickerModal = () => (
+    <Modal
+      visible={imagePickerModalVisible}
+      animationType="slide"
+      transparent={true}
+      onRequestClose={() => setImagePickerModalVisible(false)}
+    >
+      <SafeAreaView style={styles.pickerModalContainer}>
+        <View style={styles.pickerModalContent}>
+          <View style={styles.pickerModalHeader}>
+            <Text style={styles.pickerModalTitle}>Add Photos to Review</Text>
+            <TouchableOpacity
+              onPress={() => setImagePickerModalVisible(false)}
+            >
+              <MaterialCommunityIcons
+                name="close"
+                size={28}
+                color="#333"
+              />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.pickerOptionsContainer}>
+            {/* TAKE PHOTO OPTION */}
+            <TouchableOpacity
+              style={styles.pickerOption}
+              onPress={handleTakePhoto}
+            >
+              <View style={styles.pickerOptionIcon}>
+                <MaterialCommunityIcons
+                  name="camera"
+                  size={48}
+                  color="#fff"
+                />
+              </View>
+              <View style={styles.pickerOptionText}>
+                <Text style={styles.pickerOptionTitle}>Take a Photo</Text>
+                <Text style={styles.pickerOptionDesc}>
+                  Use your camera to capture a new photo
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* UPLOAD FROM LIBRARY OPTION */}
+            <TouchableOpacity
+              style={styles.pickerOption}
+              onPress={handleUploadFromGallery}
+            >
+              <View style={styles.pickerOptionIcon}>
+                <MaterialCommunityIcons
+                  name="image-multiple"
+                  size={48}
+                  color="#fff"
+                />
+              </View>
+              <View style={styles.pickerOptionText}>
+                <Text style={styles.pickerOptionTitle}>Upload Photos</Text>
+                <Text style={styles.pickerOptionDesc}>
+                  Choose from your photo gallery
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity
+            style={styles.pickerCancelBtn}
+            onPress={() => setImagePickerModalVisible(false)}
+          >
+            <Text style={styles.pickerCancelText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    </Modal>
+  );
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -418,6 +532,9 @@ const ReviewFormScreen = ({ route, navigation }) => {
 
         <View style={{ height: 20 }} />
       </ScrollView>
+
+      {/* ===== IMAGE PICKER MODAL ===== */}
+      <ImagePickerModal />
     </View>
   );
 };
@@ -692,6 +809,80 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#fff',
+  },
+
+  // ========== IMAGE PICKER MODAL STYLES ==========
+  pickerModalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  pickerModalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: 20,
+  },
+  pickerModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  pickerModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#333',
+  },
+  pickerOptionsContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 20,
+    gap: 12,
+  },
+  pickerOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+    borderRadius: 12,
+    padding: 16,
+    gap: 16,
+  },
+  pickerOptionIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 12,
+    backgroundColor: '#B76E79',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pickerOptionText: {
+    flex: 1,
+  },
+  pickerOptionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#333',
+    marginBottom: 4,
+  },
+  pickerOptionDesc: {
+    fontSize: 13,
+    color: '#666',
+  },
+  pickerCancelBtn: {
+    marginHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  pickerCancelText: {
+    textAlign: 'center',
+    color: '#666',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
 

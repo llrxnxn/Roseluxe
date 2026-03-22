@@ -273,6 +273,88 @@ const ReviewScreen = ({ navigation }) => {
     });
   };
 
+  const handleDeleteReview = (item) => {
+    Alert.alert(
+      'Delete Review',
+      'Are you sure you want to delete this review? This action cannot be undone.',
+      [
+        {
+          text: 'Cancel',
+          onPress: () => {},
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          onPress: () => deleteReview(item.reviewId),
+          style: 'destructive',
+        },
+      ]
+    );
+  };
+
+  const deleteReview = async (reviewId) => {
+    try {
+      setLoading(true);
+
+      const token = await AsyncStorage.getItem('token');
+
+      if (!token) {
+        Alert.alert('Error', 'Please login first');
+        navigation.navigate('Login');
+        return;
+      }
+
+      const response = await fetch(`${API_ENDPOINTS.REVIEWS}/${reviewId}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          Alert.alert('Session Expired', 'Please login again.');
+          await AsyncStorage.multiRemove(['token', 'user']);
+          navigation.navigate('Login');
+          return;
+        }
+
+        if (response.status === 403) {
+          Alert.alert(
+            'Error',
+            'You can only delete your own reviews.'
+          );
+          setLoading(false);
+          return;
+        }
+
+        if (response.status === 404) {
+          Alert.alert('Error', 'Review not found.');
+          setLoading(false);
+          return;
+        }
+
+        throw new Error('Failed to delete review');
+      }
+
+      const data = await response.json();
+
+      if (data.success) {
+        Alert.alert('Success', 'Review deleted successfully');
+        // Refresh the review items
+        await fetchReviewItems();
+      } else {
+        Alert.alert('Error', data.message || 'Failed to delete review');
+        setLoading(false);
+      }
+    } catch (error) {
+      console.error('Delete review error:', error.message);
+      Alert.alert('Error', error.message || 'Failed to delete review');
+      setLoading(false);
+    }
+  };
+
   /**
    * Render individual "To Review" item card
    */
@@ -377,19 +459,36 @@ const ReviewScreen = ({ navigation }) => {
             Reviewed on {new Date(item.createdAt).toLocaleDateString()}
           </Text>
 
-          {/* Edit Button */}
-          <TouchableOpacity
-            style={styles.editButton}
-            onPress={() => handleEditReview(item)}
-            activeOpacity={0.8}
-          >
-            <MaterialCommunityIcons
-              name="pencil"
-              size={16}
-              color="#fff"
-            />
-            <Text style={styles.editButtonText}>Edit Review</Text>
-          </TouchableOpacity>
+          {/* Action Buttons Container */}
+          <View style={styles.buttonContainer}>
+            {/* Edit Button */}
+            <TouchableOpacity
+              style={[styles.editButton, { flex: 1, marginRight: 8 }]}
+              onPress={() => handleEditReview(item)}
+              activeOpacity={0.8}
+            >
+              <MaterialCommunityIcons
+                name="pencil"
+                size={16}
+                color="#fff"
+              />
+              <Text style={styles.editButtonText}>Edit</Text>
+            </TouchableOpacity>
+
+            {/* Delete Button */}
+            <TouchableOpacity
+              style={[styles.deleteButton, { flex: 1 }]}
+              onPress={() => handleDeleteReview(item)}
+              activeOpacity={0.8}
+            >
+              <MaterialCommunityIcons
+                name="trash-can-outline"
+                size={16}
+                color="#fff"
+              />
+              <Text style={styles.deleteButtonText}>Delete</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     );
@@ -734,6 +833,12 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
 
+  // Button Container for Edit and Delete
+  buttonContainer: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+
   editButton: {
     flexDirection: 'row',
     backgroundColor: '#7B6B7E',
@@ -742,11 +847,28 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
   },
 
   editButtonText: {
-    fontSize: 13,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#fff',
+  },
+
+  deleteButton: {
+    flexDirection: 'row',
+    backgroundColor: '#D32F2F',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 4,
+  },
+
+  deleteButtonText: {
+    fontSize: 12,
     fontWeight: '600',
     color: '#fff',
   },
