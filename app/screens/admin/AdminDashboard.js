@@ -7,12 +7,16 @@ import {
   Alert,
   Dimensions,
   SafeAreaView,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { Text, Card } from 'react-native-paper';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { LineChart, PieChart } from 'react-native-chart-kit';
 import AdminHeader from './AdminHeader';
+import AdminService from '../../utils/AdminService';
+import ExportReport from '../../utils/ExportReport';
 
 const { width } = Dimensions.get('window');
 
@@ -20,21 +24,155 @@ export default function AdminDashboard({ navigation }) {
   const [user, setUser] = useState(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [dashboardData, setDashboardData] = useState({
+    totalUsers: 0,
+    totalProducts: 0,
+    totalOrders: 0,
+    totalCategories: 0,
+    ordersByStatus: {
+      pending: 0,
+      shipped: 0,
+      delivered: 0,
+      cancelled: 0,
+    },
+    monthlyOrderData: [0, 0, 0, 0, 0, 0],
+    users: [],
+    products: [],
+    categories: [],
+    orders: [],
+  });
 
   useEffect(() => {
     loadUserData();
+    fetchDashboardData();
   }, []);
 
   const loadUserData = async () => {
     try {
       const userData = await AsyncStorage.getItem('user');
+
       if (userData) {
-        setUser(JSON.parse(userData));
+        const userObj = JSON.parse(userData);
+        setUser(userObj);
+
+        // Verify user is admin
+        if (userObj.role !== 'admin') {
+          Alert.alert('Access Denied', 'You do not have admin privileges');
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'Home' }],
+          });
+        }
       }
     } catch (error) {
       console.log('Error loading user data:', error);
     }
   };
+
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+
+      // Fetch all required data in parallel
+      const dashData = await AdminService.getDashboardData();
+
+      // Extract arrays safely with defaults
+      const users = dashData?.users?.users || [];
+      const products = dashData?.products?.products || [];
+      const categories = dashData?.categories?.categories || [];
+      const orders = Array.isArray(dashData?.orders?.orders)
+      ? dashData.orders.orders
+      : [];
+
+      console.log('[Dashboard] Processing data:', {
+        users: users.length,
+        products: products.length,
+        categories: categories.length,
+        orders: orders.length,
+      });
+
+      const stats = {
+        totalUsers: users.length,
+        totalProducts: products.length,
+        totalOrders: orders.length,
+        totalCategories: categories.length,
+        ordersByStatus: {
+          pending: orders.filter(o => o?.orderStatus === 'pending').length,
+          shipped: orders.filter(o => o?.orderStatus === 'shipped').length,
+          delivered: orders.filter(o => o?.orderStatus === 'delivered').length,
+          cancelled: orders.filter(o => o?.orderStatus === 'cancelled').length,
+        },
+        monthlyOrderData: calculateMonthlyOrders(orders),
+        users,
+        products,
+        categories,
+        orders,
+      };
+
+      console.log('[Dashboard] Stats calculated:', stats);
+      setDashboardData(prev => ({
+        ...prev,
+        ...stats,
+      }));
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+      Alert.alert('Error', 'Failed to load dashboard data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const calculateMonthlyOrders = (orders) => {
+  if (!Array.isArray(orders)) return [0, 0, 0, 0, 0, 0];
+
+  const months = [0, 0, 0, 0, 0, 0];
+  const now = new Date();
+
+  orders.forEach(order => {
+    if (!order?.createdAt) return;
+
+    const orderDate = new Date(order.createdAt);
+
+    const diffMonths =
+      (now.getFullYear() - orderDate.getFullYear()) * 12 +
+      (now.getMonth() - orderDate.getMonth());
+
+    if (diffMonths >= 0 && diffMonths < 6) {
+      months[5 - diffMonths] += 1;
+    }
+  });
+
+  return months;
+};
+
+  const exportReport = async () => {
+  try {
+    setExporting(true);
+    // Ensure all required data is present
+    const dataToExport = {
+      ...dashboardData,
+      totalUsers: dashboardData.totalUsers,
+      totalProducts: dashboardData.totalProducts,
+      totalOrders: dashboardData.totalOrders,
+      totalCategories: dashboardData.totalCategories,
+    };
+    
+    const result = await ExportReport.exportToPDF(dataToExport);
+    
+    Alert.alert(
+      'Success',
+      'Report exported successfully!'
+    );
+  } catch (error) {
+    console.error('Export error:', error);
+    Alert.alert('Error', 'Failed to export report: ' + error.message);
+  } finally {
+    setExporting(false);
+  }
+};
 
   const handleLogout = async () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
@@ -46,7 +184,7 @@ export default function AdminDashboard({ navigation }) {
         text: 'Logout',
         onPress: async () => {
           try {
-            await AsyncStorage.removeItem('authToken');
+            await AsyncStorage.removeItem('token');
             await AsyncStorage.removeItem('user');
             navigation.reset({
               index: 0,
@@ -61,21 +199,20 @@ export default function AdminDashboard({ navigation }) {
   };
 
   const navigateTo = (screenName) => {
-  if (screenName === 'logout') {
-    handleLogout();
-    return;
-  }
+    if (screenName === 'logout') {
+      handleLogout();
+      return;
+    }
 
-  if (screenName === 'overview') {
-    setActiveTab('overview');
-    return;
-  }
+    if (screenName === 'overview') {
+      setActiveTab('overview');
+      return;
+    }
 
-  setActiveTab(screenName);
-  navigation.navigate(screenName);
-};
+    setActiveTab(screenName);
+    navigation.navigate(screenName);
+  };
 
-  // Menu items configuration
   const menuItems = [
     {
       label: 'Overview',
@@ -118,74 +255,78 @@ export default function AdminDashboard({ navigation }) {
     {
       icon: 'package-variant',
       label: 'Products',
-      value: '156',
+      value: dashboardData.totalProducts.toString(),
       color: '#E8A4B0',
       bgColor: '#FFE8ED',
     },
     {
       icon: 'account-multiple',
       label: 'Users',
-      value: '89',
+      value: dashboardData.totalUsers.toString(),
       color: '#B76E79',
       bgColor: '#FFD4E5',
     },
     {
       icon: 'cart-outline',
       label: 'Orders',
-      value: '342',
+      value: dashboardData.totalOrders.toString(),
       color: '#9B5568',
       bgColor: '#FFC0D9',
     },
     {
-      icon: 'currency-php',
-      label: 'Sales',
-      value: '₱45.2K',
+      icon: 'tag-multiple',
+      label: 'Categories',
+      value: dashboardData.totalCategories.toString(),
       color: '#7A3D52',
       bgColor: '#FFACC7',
     },
   ];
 
-  const lineChartData = {
-    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
-    datasets: [
-      {
-        data: [30, 45, 32, 56, 48, 72],
-        color: (opacity = 1) => `rgba(183, 110, 121, ${opacity})`,
-        strokeWidth: 3,
-      },
-    ],
+  const getLast6Months = () => {
+    const months = [];
+    const now = new Date();
+
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i);
+      months.push(d.toLocaleString('default', { month: 'short' }));
+    }
+
+    return months;
   };
 
+  const lineChartData = {
+  labels: getLast6Months(),
+  datasets: [
+    {
+      data: dashboardData.monthlyOrderData || [0, 0, 0, 0, 0, 0],
+      color: (opacity = 1) => `rgba(183, 110, 121, ${opacity})`,
+      strokeWidth: 3,
+    },
+  ],
+};
+
   const pieChartData = [
-    {
-      name: 'Pending',
-      value: 45,
-      color: '#FFB3D9',
-      legendFontColor: '#7F8C8D',
-      legendFontSize: 11,
-    },
-    {
-      name: 'Shipped',
-      value: 120,
-      color: '#E8A4B0',
-      legendFontColor: '#7F8C8D',
-      legendFontSize: 11,
-    },
-    {
-      name: 'Delivered',
-      value: 156,
-      color: '#B76E79',
-      legendFontColor: '#7F8C8D',
-      legendFontSize: 11,
-    },
-    {
-      name: 'Cancelled',
-      value: 21,
-      color: '#9B5568',
-      legendFontColor: '#7F8C8D',
-      legendFontSize: 11,
-    },
-  ];
+  {
+    name: 'Pending',
+    population: dashboardData.ordersByStatus?.pending || 0,
+    color: '#FFA726',
+  },
+  {
+    name: 'Shipped',
+    population: dashboardData.ordersByStatus?.shipped || 0,
+    color: '#42A5F5',
+  },
+  {
+    name: 'Delivered',
+    population: dashboardData.ordersByStatus?.delivered || 0,
+    color: '#66BB6A',
+  },
+  {
+    name: 'Cancelled',
+    population: dashboardData.ordersByStatus?.cancelled || 0,
+    color: '#EF5350',
+  },
+];
 
   const StatCard = ({ icon, label, value, color, bgColor }) => (
     <View style={[styles.statCard, { backgroundColor: bgColor }]}>
@@ -199,20 +340,39 @@ export default function AdminDashboard({ navigation }) {
     </View>
   );
 
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#B76E79" />
+          <Text style={styles.loadingText}>Loading Dashboard...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header with new modal menu */}
       <AdminHeader
         menuItems={menuItems}
         onMenuPress={(isOpen) => setIsMenuOpen(isOpen)}
       />
 
-      {/* Main Content Area */}
       <View style={styles.mainContent}>
         <ScrollView
           style={styles.contentArea}
           contentContainerStyle={styles.contentContainer}
           scrollEnabled={!isMenuOpen}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                setRefreshing(true);
+                fetchDashboardData().then(() => setRefreshing(false));
+              }}
+              colors={['#B76E79']}
+            />
+          }
         >
           {activeTab === 'overview' && (
             <>
@@ -220,7 +380,7 @@ export default function AdminDashboard({ navigation }) {
                 <View style={styles.welcomeContent}>
                   <Text style={styles.welcomeTitle}>Dashboard Overview</Text>
                   <Text style={styles.welcomeSubtitle}>
-                    Your ROSELUXE admin center
+                    Welcome, {user?.fullName || 'Admin'}
                   </Text>
                 </View>
                 <Text style={styles.flowerEmoji}>🌹</Text>
@@ -232,6 +392,20 @@ export default function AdminDashboard({ navigation }) {
                     <StatCard {...stat} />
                   </View>
                 ))}
+              </View>
+
+              <View style={styles.analyticsHeader}>
+                <Text style={styles.analyticsTitle}>Analytics</Text>
+                <TouchableOpacity 
+                  style={styles.exportButton}
+                  onPress={exportReport}
+                  disabled={exporting}
+                >
+                  <MaterialCommunityIcons name="file-pdf-box" size={18} color="white" />
+                  <Text style={styles.exportButtonText}>
+                    {exporting ? 'EXPORTING...' : 'EXPORT REPORT'}
+                  </Text>
+                </TouchableOpacity>
               </View>
 
               <View style={styles.chartsSection}>
@@ -248,88 +422,44 @@ export default function AdminDashboard({ navigation }) {
                       color: (opacity = 1) =>
                         `rgba(183, 110, 121, ${opacity})`,
                       strokeWidth: 2,
-                      barPercentage: 0.5,
+                      decimalPlaces: 0,
                       useShadowColorFromDataset: false,
                     }}
+                    formatYLabel={(y) => Math.round(y).toString()}
                     bezier
                     style={styles.lineChart}
                   />
                 </View>
 
                 <View style={styles.chartCard}>
-                  <Text style={styles.chartTitle}>📦 Order Status</Text>
-                  <PieChart
-                    data={pieChartData}
-                    width={width - 48}
-                    height={180}
-                    chartConfig={{
-                      color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-                    }}
-                    accessor="value"
-                    backgroundColor="white"
-                    paddingLeft="10"
-                    style={styles.pieChart}
-                  />
-                </View>
-              </View>
-
-              <View style={styles.summarySection}>
-                <Text style={styles.summaryTitle}>Quick Summary</Text>
-
-                <View style={styles.summaryCardsContainer}>
-                  <Card style={styles.summaryCard}>
-                    <Card.Content>
-                      <View style={styles.summaryCardRow}>
-                        <MaterialCommunityIcons
-                          name="package-variant-closed"
-                          size={24}
-                          color="#B76E79"
-                        />
-                        <View style={styles.summaryCardText}>
-                          <Text style={styles.summaryCardLabel}>
-                            New Orders Today
-                          </Text>
-                          <Text style={styles.summaryCardValue}>12</Text>
-                        </View>
-                      </View>
-                    </Card.Content>
-                  </Card>
-
-                  <Card style={styles.summaryCard}>
-                    <Card.Content>
-                      <View style={styles.summaryCardRow}>
-                        <MaterialCommunityIcons
-                          name="currency-php"
-                          size={24}
-                          color="#B76E79"
-                        />
-                        <View style={styles.summaryCardText}>
-                          <Text style={styles.summaryCardLabel}>
-                            Today's Revenue
-                          </Text>
-                          <Text style={styles.summaryCardValue}>₱3.2K</Text>
-                        </View>
-                      </View>
-                    </Card.Content>
-                  </Card>
-
-                  <Card style={styles.summaryCard}>
-                    <Card.Content>
-                      <View style={styles.summaryCardRow}>
-                        <MaterialCommunityIcons
-                          name="account-plus"
-                          size={24}
-                          color="#B76E79"
-                        />
-                        <View style={styles.summaryCardText}>
-                          <Text style={styles.summaryCardLabel}>
-                            New Customers
-                          </Text>
-                          <Text style={styles.summaryCardValue}>5</Text>
-                        </View>
-                      </View>
-                    </Card.Content>
-                  </Card>
+                  <Text style={styles.chartTitle}>Order Status</Text>
+                  {(dashboardData.ordersByStatus.pending +
+                    dashboardData.ordersByStatus.shipped +
+                    dashboardData.ordersByStatus.delivered +
+                    dashboardData.ordersByStatus.cancelled) > 0 ? (
+                    <View style={styles.pieChartContainer}>
+                      <PieChart
+                        data={pieChartData.filter(item => item.population > 0).map(item => ({
+                          ...item,
+                          name: `${item.name}\n(${item.population})`
+                        }))}
+                        width={width - 48}
+                        height={220}
+                        chartConfig={{
+                          color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+                        }}
+                        accessor="population"
+                        backgroundColor="transparent"
+                        paddingLeft="10"
+                        absolute
+                        style={styles.pieChart}
+                      />
+                    </View>
+                  ) : (
+                    <View style={styles.emptyChart}>
+                      <Text style={styles.emptyChartText}>No orders yet</Text>
+                    </View>
+                  )}
                 </View>
               </View>
 
@@ -346,6 +476,18 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FAFAFA',
+  },
+
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  loadingText: {
+    marginTop: 10,
+    fontSize: 14,
+    color: '#B76E79',
   },
 
   mainContent: {
@@ -446,6 +588,36 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
+  analyticsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingHorizontal: 4,
+  },
+
+  analyticsTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#333',
+  },
+
+  exportButton: {
+    flexDirection: 'row',
+    backgroundColor: '#B76E79',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    gap: 8,
+  },
+
+  exportButtonText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 12,
+  },
+
   chartsSection: {
     gap: 12,
     marginBottom: 18,
@@ -471,55 +643,27 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
 
+  pieChartContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+
   pieChart: {
     borderRadius: 8,
   },
 
-  summarySection: {
-    marginBottom: 18,
-  },
-
-  summaryTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#333',
-    marginBottom: 12,
-  },
-
-  summaryCardsContainer: {
-    gap: 10,
-  },
-
-  summaryCard: {
-    backgroundColor: 'white',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#F0E6EB',
-    elevation: 1,
-    paddingVertical: 2,
-  },
-
-  summaryCardRow: {
-    flexDirection: 'row',
+  emptyChart: {
+    height: 180,
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 12,
+    backgroundColor: '#F9F9F9',
+    borderRadius: 8,
   },
 
-  summaryCardText: {
-    flex: 1,
-  },
-
-  summaryCardLabel: {
-    fontSize: 12,
+  emptyChartText: {
+    fontSize: 14,
     color: '#999',
-    fontWeight: '500',
-  },
-
-  summaryCardValue: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#B76E79',
-    marginTop: 2,
   },
 
   bottomPadding: {
