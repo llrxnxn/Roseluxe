@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://10.58.240.50:5000';
+const API_BASE_URL = 'https://roseluxe.onrender.com';
 
 export const API_ENDPOINTS = {
   AUTH: `${API_BASE_URL}/api/auth`,
