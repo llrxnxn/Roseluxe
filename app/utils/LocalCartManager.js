@@ -284,8 +284,8 @@ class LocalCartManager {
   }
 
   /**
-   * Calculate totals (subtotal, tax, total)
-   * @returns {Promise<{subtotal: number, tax: number, total: number}>}
+   * Calculate totals (subtotal, total)
+   * @returns {Promise<{subtotal: number, total: number}>}
    */
   static async calculateTotals() {
     try {
@@ -295,19 +295,16 @@ class LocalCartManager {
         (sum, item) => sum + item.price * item.quantity,
         0
       );
-      const tax = subtotal * 0.12;
-      const total = subtotal + tax;
+      const total = subtotal;
 
       return {
         subtotal: parseFloat(subtotal.toFixed(2)),
-        tax: parseFloat(tax.toFixed(2)),
         total: parseFloat(total.toFixed(2)),
       };
     } catch (error) {
       console.error("[LocalCartManager] Error calculating totals:", error);
       return {
         subtotal: 0,
-        tax: 0,
         total: 0,
       };
     }

@@ -343,6 +343,7 @@ export default function AdminAddProduct({ navigation, route }) {
       formDataObj.append('price', formData.price);
       formDataObj.append('stock', formData.stock || '0');
       formDataObj.append('category', formData.category);
+      formDataObj.append('existingImages', JSON.stringify(formData.images));
 
       selectedImages.forEach((img, index) => {
         const fileExtension = getFileExtensionFromMimeType(img.mimeType);

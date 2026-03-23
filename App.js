@@ -21,6 +21,7 @@ import ReviewFormScreen from './app/screens/ReviewFormScreen';
 
 import AdminDashboard from './app/screens/admin/AdminDashboard';
 import AdminProducts from './app/screens/admin/AdminProduct';
+import AdminDiscounts from './app/screens/admin/AdminDiscounts';
 import AdminCategories from './app/screens/admin/AdminCategories';
 import AdminReviews from './app/screens/admin/AdminReviews';
 import AdminAddProduct from './app/screens/admin/AdminAddProducts';
@@ -63,7 +64,6 @@ function RootNavigator() {
 
     checkUserRole();
   }, []);
-
   if (isLoading) {
     return null;
   }
@@ -95,6 +95,7 @@ function RootNavigator() {
         <Stack.Screen name="AdminDashboard" component={AdminDashboard} />
         <Stack.Screen name="AdminUsers" component={AdminUsers} />
         <Stack.Screen name="AdminProducts" component={AdminProducts} />
+        <Stack.Screen name="AdminDiscounts" component={AdminDiscounts} />
         <Stack.Screen name="AdminOrders" component={AdminOrders} />
         <Stack.Screen name="AdminReviews" component={AdminReviews} />
         <Stack.Screen name="AdminAddProduct" component={AdminAddProduct} options={{ presentation: 'modal' }}/>

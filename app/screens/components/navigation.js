@@ -259,15 +259,6 @@ const Navigation = ({
             onPress={() => handleDrawerNavigation('AboutUs')}
           />
 
-          {isLoggedIn && (
-            <DrawerMenuItem
-              icon="bell"
-              label="Notifications"
-              onPress={() => handleDrawerNavigation('Notifications')}
-            />
-          )}
-
-
           <View style={styles.drawerDivider} />
 
           {/* Show Login/Signup if NOT logged in, Show Logout if logged in */}

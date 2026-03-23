@@ -37,13 +37,13 @@ const LoginScreen = ({ navigation }) => {
       console.log('User name:', user.fullName);
 
       // Save token
-    await AsyncStorage.setItem("token", token);
+      await AsyncStorage.setItem("token", token);
 
-    // Save user
-    await AsyncStorage.setItem("user", JSON.stringify(user));
+      // Save user
+      await AsyncStorage.setItem("user", JSON.stringify(user));
 
-    console.log("TOKEN:", token);
-console.log("USER:", user);
+      console.log("TOKEN:", token);
+      console.log("USER:", user);
       Alert.alert('Success', message || 'Login successful');
 
       if (user.role === 'admin') {

@@ -235,6 +235,11 @@ export default function AdminDashboard({ navigation }) {
       onPress: () => navigateTo('AdminCategories'),
     },
     {
+      label: 'Discounts',
+      icon: 'percent',
+      onPress: () => navigateTo('AdminDiscounts'),
+    },
+    {
       label: 'Orders',
       icon: 'clipboard-list',
       onPress: () => navigateTo('AdminOrders'),

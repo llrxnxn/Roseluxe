@@ -303,7 +303,7 @@ exports.updateProduct = async (req, res) => {
     console.log('UPDATE PRODUCT REQUEST');
     console.log('Product ID:', req.params.id);
 
-    const { name, description, price, stock, category } = req.body;
+    const { name, description, price, stock, category, existingImages } = req.body;
     const productId = req.params.id;
 
     const product = await Product.findById(productId);
@@ -372,6 +372,24 @@ exports.updateProduct = async (req, res) => {
     if (price !== undefined && price !== '') product.price = parseFloat(price);
     if (stock !== undefined && stock !== '') product.stock = parseInt(stock);
     if (category) product.category = category.trim();
+
+    if (existingImages !== undefined) {
+      try {
+        const parsedExistingImages =
+          typeof existingImages === 'string'
+            ? JSON.parse(existingImages)
+            : existingImages;
+
+        product.images = Array.isArray(parsedExistingImages)
+          ? parsedExistingImages.filter(Boolean)
+          : [];
+      } catch (parseError) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid existing images payload',
+        });
+      }
+    }
 
     /* ================= IMAGE HANDLING ================= */
 

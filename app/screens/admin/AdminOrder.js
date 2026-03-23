@@ -59,6 +59,11 @@ const AdminOrders = ({ navigation }) => {
       onPress: () => navigation.navigate('AdminCategories'),
     },
     {
+      label: 'Discounts',
+      icon: 'percent',
+      onPress: () => navigation.navigate('AdminDiscounts'),
+    },
+    {
       label: 'Orders',
       icon: 'clipboard-list',
       onPress: () => navigation.navigate('AdminOrders'),

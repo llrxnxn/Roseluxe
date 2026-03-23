@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "flowershop",
-    "slug": "flowershop",
+    "slug": "roseluxe",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -24,6 +24,12 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "217504a1-2059-4f6a-922e-2131ae84d179"
+      }
+    },
+    "owner": "thea_arnado"
   }
 }

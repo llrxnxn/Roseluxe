@@ -1,4 +1,4 @@
-const API_BASE_URL = 'https://jeana-unchiselled-remunerably.ngrok-free.dev';
+const API_BASE_URL = 'http://10.58.240.50:5000';
 
 export const API_ENDPOINTS = {
   AUTH: `${API_BASE_URL}/api/auth`,
@@ -6,6 +6,10 @@ export const API_ENDPOINTS = {
   PRODUCTS: `${API_BASE_URL}/api/products`,
   ORDERS: `${API_BASE_URL}/api/orders`,
   USERS: `${API_BASE_URL}/api/users`,
+  DISCOUNTS: `${API_BASE_URL}/api/discounts`,
+  DISCOUNT_BY_ID: (id) => `${API_BASE_URL}/api/discounts/${id}`,
+  DISCOUNT_TOGGLE: (id) => `${API_BASE_URL}/api/discounts/${id}/toggle-status`,
+  DISCOUNT_BULK_DELETE: `${API_BASE_URL}/api/discounts/bulk-delete`,
 
     // REVIEW ENDPOINTS
   REVIEWS: `${API_BASE_URL}/api/reviews`,

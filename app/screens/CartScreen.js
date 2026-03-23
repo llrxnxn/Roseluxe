@@ -309,8 +309,7 @@ const CartScreen = ({ navigation }) => {
     .filter(item => selectedItems.has(item.productId))
     .reduce((sum, item) => sum + (item.price * item.quantity || 0), 0);
 
-  const selectedTax = selectedSubtotal * 0.12;
-  const selectedTotal = selectedSubtotal + selectedTax;
+  const selectedTotal = selectedSubtotal;
 
   if (isLoading) {
     return (
@@ -384,11 +383,6 @@ const CartScreen = ({ navigation }) => {
                       Subtotal ({selectedItems.size} item{selectedItems.size > 1 ? 's' : ''})
                     </Text>
                     <Text style={styles.summaryValue}>₱{selectedSubtotal.toFixed(2)}</Text>
-                  </View>
-
-                  <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>Tax (12%)</Text>
-                    <Text style={styles.summaryValue}>₱{selectedTax.toFixed(2)}</Text>
                   </View>
 
                   <View style={[styles.summaryRow, styles.totalRow]}>
@@ -733,3 +727,4 @@ const styles = StyleSheet.create({
 });
 
 export default CartScreen;
+

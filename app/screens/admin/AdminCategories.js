@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -18,6 +18,34 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import AdminHeader from './AdminHeader';
 import { API_ENDPOINTS } from '../../config/api';
+
+const InputField = React.memo(function InputField({
+  label,
+  field,
+  placeholder,
+  multiline = false,
+  value,
+  error,
+  onChange,
+}) {
+  return (
+    <View style={styles.inputGroup}>
+      <Text style={styles.label}>{label}</Text>
+      <TextInput
+        style={[
+          styles.input,
+          multiline && { height: 80, textAlignVertical: 'top' },
+          error && styles.inputError,
+        ]}
+        placeholder={placeholder}
+        value={value}
+        onChangeText={onChange}
+        multiline={multiline}
+      />
+      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+    </View>
+  );
+});
 
 export default function AdminCategories({ navigation }) {
   // ========== STATE ==========
@@ -63,6 +91,11 @@ export default function AdminCategories({ navigation }) {
       label: 'Categories',
       icon: 'tag-multiple',
       onPress: () => navigation.navigate('AdminCategories'),
+    },
+    {
+      label: 'Discounts',
+      icon: 'percent',
+      onPress: () => navigation.navigate('AdminDiscounts'),
     },
     {
       label: 'Orders',
@@ -352,7 +385,7 @@ export default function AdminCategories({ navigation }) {
   };
 
   /* ================= INPUT HANDLER ================= */
-  const handleInputChange = (field, value) => {
+  const handleInputChange = useCallback((field, value) => {
     setFormData((prev) => ({
       ...prev,
       [field]: value,
@@ -364,26 +397,7 @@ export default function AdminCategories({ navigation }) {
         [field]: '',
       }));
     }
-  };
-
-  /* ================= INPUT FIELD COMPONENT ================= */
-  const InputField = ({ label, field, placeholder, multiline = false }) => (
-    <View style={styles.inputGroup}>
-      <Text style={styles.label}>{label}</Text>
-      <TextInput
-        style={[
-          styles.input,
-          multiline && { height: 80, textAlignVertical: 'top' },
-          errors[field] && styles.inputError,
-        ]}
-        placeholder={placeholder}
-        value={formData[field]}
-        onChangeText={(value) => handleInputChange(field, value)}
-        multiline={multiline}
-      />
-      {errors[field] && <Text style={styles.errorText}>{errors[field]}</Text>}
-    </View>
-  );
+  }, [errors]);
 
   /* ================= PRODUCT CARD COMPONENT ================= */
   const ProductCard = ({ product }) => (
@@ -549,12 +563,18 @@ export default function AdminCategories({ navigation }) {
                   label="Category Name *"
                   field="name"
                   placeholder="e.g., Bouquets"
+                  value={formData.name}
+                  error={errors.name}
+                  onChange={(value) => handleInputChange('name', value)}
                 />
                 <InputField
                   label="Description *"
                   field="description"
                   placeholder="Describe this category..."
                   multiline
+                  value={formData.description}
+                  error={errors.description}
+                  onChange={(value) => handleInputChange('description', value)}
                 />
               </View>
 

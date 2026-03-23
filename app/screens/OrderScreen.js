@@ -493,12 +493,6 @@ const OrdersScreen = ({ navigation }) => {
                         ₱{selectedOrder.totals?.shippingFee.toFixed(2) || "0.00"}
                       </Text>
                     </View>
-                    <View style={styles.summaryRow}>
-                      <Text style={styles.summaryLabel}>Tax (12%)</Text>
-                      <Text style={styles.summaryValue}>
-                        ₱{selectedOrder.totals?.tax.toFixed(2) || "0.00"}
-                      </Text>
-                    </View>
                     <View style={[styles.summaryRow, styles.totalRow]}>
                       <Text style={styles.totalLabel}>Total Amount</Text>
                       <Text style={styles.totalValue}>
